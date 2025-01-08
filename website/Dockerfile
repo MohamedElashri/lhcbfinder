@@ -29,7 +29,7 @@ RUN mkdir -p logs
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn
+    && pip install --no-cache-dir gunicorn redis
 
 # Create and switch to non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app

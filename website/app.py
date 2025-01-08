@@ -9,18 +9,39 @@ from helpers import get_matches, fetch_abstract, error, parse_arxiv_identifier
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+# For Flask-Limiter v2, the storage classes are imported directly
+import redis
+from limits.storage import MemoryStorage, RedisStorage
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = flask.Flask(__name__)
 
-
-
-# Initialize rate limiter with app and key function
-limiter = Limiter(key_func=get_remote_address)
-limiter.init_app(app)
-
+# Initialize rate limiter with configurable storage
+if os.getenv('FLASK_ENV') == 'development':
+    # Use in-memory storage for local development
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri="memory://"
+    )
+else:
+    # Use Redis storage for production
+    redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+    try:
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            storage_uri=redis_url
+        )
+    except Exception as e:
+        print(f"Warning: Redis connection failed, falling back to memory storage: {e}")
+        limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            storage_uri="memory://"
+        )
 
 # Rate limit configurations
 @limiter.limit("1/30seconds", error_message="Too many requests. Slow down!")
@@ -46,8 +67,13 @@ def get_pinecone_index():
 
 @app.route("/")
 def home():
-    return render_template("index.html")
-
+    app.logger.info("Request received for home route")
+    try:
+        return render_template("index.html")
+    except Exception:
+        app.logger.error("Error rendering home template")
+        return "Internal Server Error", 500
+        
 @app.route("/about")
 def about():
     return render_template("about.html")

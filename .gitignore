@@ -5,7 +5,7 @@ data
 **.*.zip
 **.json**
 **.pdf**
-
+**.rdb**
 
 ## Python
 
@@ -24,3 +24,4 @@ data
 
 **logs**
 **.log**
+
