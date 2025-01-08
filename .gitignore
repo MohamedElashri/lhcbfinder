@@ -1,0 +1,26 @@
+## data
+data
+**.*.csv
+**.*.json
+**.*.zip
+**.json**
+**.pdf**
+
+
+## Python
+
+**venv**
+**__pycache__**
+
+
+## secret
+**.env
+**.env.local
+**.env.development
+**.env.test
+**.env.production
+
+## logs
+
+**logs**
+**.log**

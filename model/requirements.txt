@@ -1,0 +1,10 @@
+kaggle
+tqdm
+google-cloud-storage
+PyPDF2
+requests
+numpy
+sentence-transformers
+pinecone-client
+kaggle
+python-dotenv
