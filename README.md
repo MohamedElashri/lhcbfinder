@@ -12,11 +12,11 @@ There are two main parts of this project:
 
 ## pipeline
 
-The code inside the `website` folder is responsible for creating the embeddings for the papers. It scrapes the arxiv papers dataset on kaggle and uses sentence transformers to encode the papers. The embeddings are saved in a file and used in the search part. I also use `Pinecode` to create the embeddings for the papers.
+The code inside the `model` folder is responsible for creating the embeddings for the papers. It scrapes the arxiv papers dataset on kaggle and uses sentence transformers to encode the papers. The embeddings are saved in a file and used in the search part. I also use `Pinecode` to create the embeddings for the papers.
 
 ## website 
 
-The code inside the `model` folder is responsible for the web interface. It uses the embeddings created by the pipeline to search for similar papers or use natural language queries to search for papers. The website is built using `Flask` python library.
+The code inside the `website` folder is responsible for the web interface. It uses the embeddings created by the pipeline to search for similar papers or use natural language queries to search for papers. The website is built using `Flask` python library.
 
 
 ## How to run the code
