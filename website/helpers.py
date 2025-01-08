@@ -39,55 +39,50 @@ def avg_score(papers):
     avg_score = sum([p.score for p in papers]) / len(papers)
     return round(avg_score, 2)
 
-def get_matches(index, k, vector=None, id=None, exclude=None, per_page=10, page=1):
+def get_matches_initial(index, k, vector=None, id=None, exclude=None):
     assert vector is not None or id is not None
+
     if vector is not None:
         top_k = index.query(vector=vector, top_k=k, include_metadata=True)
     else:
         top_k = index.query(id=id, top_k=k, include_metadata=True)
-    
+
     matches = top_k["matches"]
     papers = [Paper(match) for match in matches if match["id"] != exclude]
-    total_results = min(len(papers), 50)  # Cap total results at 50
-    papers = papers[:total_results]  # Limit to first 50 papers
-    
-    # Calculate pagination
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    paginated_papers = papers[start_idx:end_idx]
-    
-    # Calculate total pages based on total_results and per_page
-    total_pages = (total_results + per_page - 1) // per_page
-    
-    # Get authors for the current page
-    authors = get_authors(paginated_papers)
-    
+    total_results = min(len(papers), 50)
+    papers = papers[:total_results]
+
     # Convert papers to dict for JSON serialization
-    papers_dict = [paper.__dict__ for paper in paginated_papers]
-    
+    papers_dict = [paper.__dict__ for paper in papers]
+
     return json.dumps({
         "papers": papers_dict,
-        "authors": authors,
-        "pagination": {
-            "current_page": page,
-            "total_pages": total_pages,
-            "total_results": total_results,
-            "per_page": per_page
-        }
+        "total_results": total_results
     })
     
+            
 def get_authors(papers):
     authors = defaultdict(list)
     for paper in papers:
         for author in paper.authors_parsed:
             authors[author].append(paper)
-    authors = [{"author": author,
-                "papers": [paper.__dict__ for paper in papers],
-                "avg_score": avg_score(papers)}
-               for author, papers in authors.items()]
+
+    # Convert Paper objects to dictionaries in the 'papers' list
+    authors_dict = {
+        author: {
+            "papers": [paper.__dict__ for paper in papers],  # Convert to dict
+            "avg_score": avg_score(papers)
+        }
+        for author, papers in authors.items()
+    }
+
+    authors = [{"author": author, **data} for author, data in authors_dict.items()]
     authors = sorted(authors, key=lambda e: e["avg_score"], reverse=True)
     authors = sorted(authors, key=lambda e: len(e["papers"]), reverse=True)
     return authors[:10]
+
+def error(msg):
+    return json.dumps({"error": msg})
 
 def error(msg):
     return json.dumps({"error": msg})

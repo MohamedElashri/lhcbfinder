@@ -5,6 +5,7 @@ let currentSort = "similarity";
 let currentPage = 1;
 let totalPages = 1;
 let resultsPerPage = 10;
+let sortedPapers = []; // Array to store the sorted papers
 
 $(window).bind("load", function () {
     const f = document.getElementById("query_field");
@@ -66,7 +67,7 @@ $(window).bind("load", function () {
 
     // Initialize theme
     initializeTheme();
-    
+
     // Check system preference changes
     if (window.matchMedia) {
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -80,13 +81,30 @@ $(window).bind("load", function () {
     }
 });
 
-
 function addPageNumber(container, pageNum) {
     const pageBtn = $("<div>")
         .addClass("page-number")
-        .toggleClass("active", pageNum === currentPage)
         .text(pageNum)
-        .on("click", () => goToPage(pageNum));
+        .on("click", () => {
+            // Update currentPage AFTER creating the button but BEFORE addPapers is called
+            currentPage = pageNum;
+
+            // Add 'active' class to the clicked page button
+            $(".page-number").removeClass("active"); // Remove from all
+            $(pageBtn).addClass("active"); // Add to the clicked button
+
+            if (currentTab === "papers") {
+                addPapers(sortedPapers);
+            } else {
+                addAuthors(results.authors);
+            }
+        });
+
+    // Check if this button is for the current page and add 'active' class if so
+    if (pageNum === currentPage) {
+        pageBtn.addClass("active");
+    }
+
     container.append(pageBtn);
 }
 
@@ -113,20 +131,48 @@ function addPaginationControls() {
                 <button id="next_page" class="page-btn">Next</button>
             </div>
         </div>`;
-    
     $("#sort_toggle_container").after(paginationHtml);
-    
+
     // Add event listeners
     $("#results_per_page").on("change", function() {
         resultsPerPage = parseInt($(this).val());
         currentPage = 1;  // Reset to first page when changing results per page
-        performSearch();
-    });
-    
-    $("#prev_page").on("click", () => goToPage(currentPage - 1));
-    $("#next_page").on("click", () => goToPage(currentPage + 1));
-}
+        
+        // Recalculate totalPages based on the new resultsPerPage
+        totalPages = Math.ceil(sortedPapers.length / resultsPerPage);
 
+        updatePagination();
+        if (currentTab === "papers") {
+            addPapers(sortedPapers);
+        } else {
+            addAuthors(results.authors);
+        }
+    });
+
+    $("#prev_page").on("click", () => {
+        if (currentPage > 1) {
+            currentPage--;
+            updatePagination();
+            if (currentTab === "papers") {
+                addPapers(sortedPapers);
+            } else {
+                addAuthors(results.authors);
+            }
+        }
+    });
+
+    $("#next_page").on("click", () => {
+        if (currentPage < totalPages) {
+            currentPage++;
+            updatePagination();
+            if (currentTab === "papers") {
+                addPapers(sortedPapers);
+            } else {
+                addAuthors(results.authors);
+            }
+        }
+    });
+}
 
 // Add sort toggle UI to the container div
 function addSortToggle() {
@@ -150,12 +196,14 @@ function addSortToggle() {
         $("[data-sort]").removeClass("toggle_enabled");
         $(this).addClass("toggle_enabled");
         currentSort = sortType;
-        if (results) {
-            if (currentTab === "papers") {
-                const sortedPapers = sortPapers(results.papers, sortType);
-                addPapers(sortedPapers);
-            }
-        }
+        currentPage = 1;
+        sortPapers(currentSort);
+
+        // Recalculate totalPages after sorting
+        totalPages = Math.ceil(sortedPapers.length / resultsPerPage);
+
+        updatePagination();
+        addPapers(sortedPapers);
     });
 }
 
@@ -170,11 +218,8 @@ function performSearch() {
 
     let queryVal = $('textarea[name="query"]').val();
 
-    // Add pagination parameters to the request
-    $.getJSON("/search", { 
-        query: queryVal,
-        per_page: resultsPerPage,
-        page: currentPage
+    $.getJSON("/search", {
+        query: queryVal
     }, function(data) {
         field.style.animationName = "";
         field.readOnly = false;
@@ -182,6 +227,10 @@ function performSearch() {
 
         if (data["error"] == null) {
             results = data;
+            // Initialize sortedPapers with the received papers, unsorted
+            sortedPapers = [...data.papers];
+            // Sort the papers based on the current sort setting
+            sortPapers(currentSort);
             updateGetParameter(queryVal, currentTab);
             $("#error_container").hide();
             $("#warning_container").hide();
@@ -199,12 +248,15 @@ function performSearch() {
                 addPaginationControls();
             }
 
-            updatePagination(data.pagination);
+            // Update pagination based on the total results
+            totalPages = Math.ceil(data.total_results / resultsPerPage);
+            updatePagination();
 
-            if (currentTab == "people") {
-                togglePeopleTab(true);
+            // Display the results based on the current tab
+            if (currentTab === "people") {
+                togglePeopleTab(false); // Assuming you want to skip animation on initial load
             } else {
-                togglePapersTab(true);
+                togglePapersTab(false); // Assuming you want to skip animation on initial load
             }
 
             $("#toggle_container").addClass("appear");
@@ -217,89 +269,66 @@ function performSearch() {
     });
 }
 
-function updatePagination(pagination) {
-    currentPage = pagination.current_page;
-    totalPages = pagination.total_pages;
-    totalResults = pagination.total_results;  // Added to track total results
-    
-    // Update info text if needed
-    $("#results_info").text(`Showing ${totalResults} papers`);
-    
+function updatePagination() {
     const prevButton = $("#prev_page");
     const nextButton = $("#next_page");
     const pageNumbers = $("#page_numbers");
-    
-    // Update button states
-    prevButton.prop("disabled", currentPage === 1);
-    nextButton.prop("disabled", currentPage === totalPages);
-    
+
+    // Correctly update button states based on currentPage and totalPages
+    prevButton.prop("disabled", currentPage <= 1); // Disable if on the first page
+    nextButton.prop("disabled", currentPage >= totalPages); // Disable if on the last page
+
     // Clear existing page numbers
     pageNumbers.empty();
-    
+
     if (totalPages <= 7) {
         // Show all pages if total is 7 or less
         for (let i = 1; i <= totalPages; i++) {
             addPageNumber(pageNumbers, i);
         }
     } else {
-        // Show first page
-        addPageNumber(pageNumbers, 1);
-        
-        // Add ellipsis and surrounding pages
-        if (currentPage <= 4) {
-            // Near start
-            for (let i = 2; i <= 5; i++) {
-                addPageNumber(pageNumbers, i);
-            }
-            addEllipsis(pageNumbers);
-            addPageNumber(pageNumbers, totalPages);
-        } else if (currentPage >= totalPages - 3) {
-            // Near end
-            addEllipsis(pageNumbers);
-            for (let i = totalPages - 4; i <= totalPages; i++) {
-                addPageNumber(pageNumbers, i);
-            }
-        } else {
-            // Middle
-            addEllipsis(pageNumbers);
-            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-                addPageNumber(pageNumbers, i);
-            }
-            addEllipsis(pageNumbers);
-            addPageNumber(pageNumbers, totalPages);
-        }
-    }
-}
+        // Logic for paginating when totalPages > 7
+        addPageNumber(pageNumbers, 1); // Always show the first page
 
-function goToPage(page) {
-    if (page < 1 || page > totalPages) return;
-    currentPage = page;
-    performSearch();
+        if (currentPage > 4) {
+            addEllipsis(pageNumbers);
+        }
+
+        const startPage = Math.max(2, currentPage - 1);
+        const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+        for (let i = startPage; i <= endPage; i++) {
+            addPageNumber(pageNumbers, i);
+        }
+
+        if (currentPage < totalPages - 3) {
+            addEllipsis(pageNumbers);
+        }
+
+        addPageNumber(pageNumbers, totalPages); // Always show the last page
+    }
 }
 
 function togglePapersTab(animated) {
     $('[data-tab="papers"]').first().addClass("toggle_enabled");
     $('[data-tab="people"]').first().removeClass("toggle_enabled");
-    
     $("#warning_container").toggle(checkLowScores(results.papers));
-    
+
     if (animated) {
         if ($("#results").hasClass("move_up")) {
             $("#results").removeClass("move_up");
             $("#results").on("transitionend", function () {
-                const sortedPapers = sortPapers(results.papers, currentSort);
                 addPapers(sortedPapers);
                 $("#results").addClass("move_up");
             });
         } else {
-            const sortedPapers = sortPapers(results.papers, currentSort);
             addPapers(sortedPapers);
             $("#results").addClass("move_up");
         }
     } else {
-        const sortedPapers = sortPapers(results.papers, currentSort);
         addPapers(sortedPapers);
     }
+
     const queryVal = findGetParameter("q");
     currentTab = "papers";
     updateGetParameter(queryVal, currentTab);
@@ -308,31 +337,34 @@ function togglePapersTab(animated) {
 function togglePeopleTab(animated) {
     $('[data-tab="people"]').first().addClass("toggle_enabled");
     $('[data-tab="papers"]').first().removeClass("toggle_enabled");
-    
     $("#warning_container").hide();
-    
+
     if (animated) {
         if ($("#results").hasClass("move_up")) {
             $("#results").removeClass("move_up");
             $("#results").on("transitionend", function () {
-                addAuthors(results["authors"]);
+                // Assuming results.authors is already an array of author objects
+                addAuthors(results.authors);
                 $("#results").addClass("move_up");
             });
         } else {
-            addAuthors(results["authors"]);
+            addAuthors(results.authors);
             $("#results").addClass("move_up");
         }
     } else {
-        addAuthors(results["authors"]);
+        addAuthors(results.authors);
     }
+
     const queryVal = findGetParameter("q");
     currentTab = "people";
     updateGetParameter(queryVal, currentTab);
 }
 
-function sortPapers(papers, sortType) {
-    return [...papers].sort((a, b) => {
-        if (sortType === "year") {
+function sortPapers(sortType) {
+    if (!results || !results.papers) return;
+
+    if (sortType === "year") {
+        sortedPapers = [...results.papers].sort((a, b) => {
             const yearDiff = parseInt(b.year) - parseInt(a.year);
             if (yearDiff !== 0) return yearDiff;
             const months = {
@@ -340,10 +372,10 @@ function sortPapers(papers, sortType) {
                 "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12
             };
             return months[b.month] - months[a.month];
-        } else {
-            return b.score - a.score;
-        }
-    });
+        });
+    } else {
+        sortedPapers = [...results.papers].sort((a, b) => b.score - a.score);
+    }
 }
 
 function findGetParameter(parameterName) {
@@ -382,11 +414,14 @@ function resultClicked(e) {
     $(e).find(".result_button_container").show();
 }
 
-function addPapers(data) {
+function addPapers(papers) {
     $("#results").empty();
-    var html = "";
-    data.forEach(e => {
-        html += addPaper(e);
+    const start = (currentPage - 1) * resultsPerPage;
+    const end = start + resultsPerPage;
+    const papersToDisplay = papers.slice(start, end);
+    let html = "";
+    papersToDisplay.forEach(paper => {
+        html += addPaper(paper);
     });
     $("#results").append(html);
     $("#results").addClass("move_up");
@@ -431,11 +466,10 @@ function addPaper(result) {
 
 function addAuthors(authors) {
     $("#results").empty();
+    const authorsToDisplay = authors.slice(0, 10); // Get the first 10 authors
     var html = '<div id="authors_flex">';
-    authors.forEach(author => {
-        const uniquePapers = Array.from(
-            new Map(author.papers.map(paper => [paper.id, paper])).values()
-        );
+    authorsToDisplay.forEach(author => {
+        const uniquePapers = Array.from(new Map(author.papers.map(paper => [paper.id, paper])).values());
         const authorWithUniquePapers = {...author, papers: uniquePapers};
         html += addAuthor(authorWithUniquePapers);
     });

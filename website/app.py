@@ -5,7 +5,7 @@ from pinecone import Pinecone
 import validators
 from flask import render_template, request
 from sentence_transformers import SentenceTransformer
-from helpers import get_matches, fetch_abstract, error, parse_arxiv_identifier
+from helpers import get_matches_initial, fetch_abstract, error, parse_arxiv_identifier
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -81,8 +81,6 @@ def about():
 @app.route("/search")
 def search():
     query = request.args.get("query")
-    results_per_page = int(request.args.get("per_page", 10))  # Default 10, no maximum limit
-    page = int(request.args.get("page", 1))  # Current page number
     K = 50  # Maximum total results capped at 50
     index = get_pinecone_index()
 
@@ -93,8 +91,8 @@ def search():
         if len(matches) == 0:
             abstract = fetch_abstract(f"https://arxiv.org/abs/{arxiv_id}")
             embed = model.encode([abstract])[0].tolist()
-            return get_matches(index, K, vector=embed, exclude=arxiv_id, per_page=results_per_page, page=page)
-        return get_matches(index, K, id=arxiv_id, exclude=arxiv_id, per_page=results_per_page, page=page)
+            return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
+        return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
 
     # Rest of your validation logic
     if len(query) > 200:
@@ -107,12 +105,11 @@ def search():
         return error("Error creating embedding. Try again in a few minutes.")
 
     try:
-        return get_matches(index, K, vector=embed, per_page=results_per_page, page=page)
+        return get_matches_initial(index, K, vector=embed)  # Use the new function
     except Exception as e:
         print(f"Encountered error when fetching matches from Pinecone: {e}", flush=True)
         return error("Pinecone not responding. Try again in a few minutes.")
         
-    
 @app.route("/robots.txt")
 def robots():
     with open("static/robots.txt", "r") as f:
