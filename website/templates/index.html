@@ -77,69 +77,81 @@
     </head>
     
     <body>
-    <div id="header">
-        <a id="logo" href="/">
-            <span class="black">search</span><span class="gray">LHCb</span><span class="red">papers</span>
-        </a>
-        <div id="right_header">
-            <button class="theme-toggle" onclick="toggleTheme()">
-                <span class="theme-toggle-text">🌙</span>
-            </button>
-            <a class="header_link" href="about"><span class="black">about</span></a>
-        </div>
-    </div>
-    <p id="tip">Insert an arXiv link to find similar LHCb papers or use natural language to describe what you are looking for.</p>
-    <div id="loading_container" style="display: none;">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-    </div>
-    <div id="container">
-        <form id="search_form" onsubmit="performSearch(); return false;">
-            <textarea id="query_field" class="placeholder_hidden" name="query" autocapitalize="off" 
-            placeholder='e.g. "CP violation in B0 meson decays" or "Dark Matter searches at LHCb"'></textarea>
-            <button id="search_button" type="submit">Search</button>
-        </form>
-        <div id="error_container">
-            <div id="error_flex">
-                <div id="error_symbol"></div>
-                <p id="error_text">Error</p>
+        <div id="header">
+            <a id="logo" href="/">
+                <span class="black">search</span><span class="gray">LHCb</span><span class="red">papers</span>
+            </a>
+            <div id="right_header">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <span class="theme-toggle-text">🌙</span>
+                </button>
+                <a class="header_link" href="about"><span class="black">about</span></a>
             </div>
         </div>
-        <div id="warning_container" style="display: none;">
-            <div id="warning_flex">
-                <div id="warning_symbol"></div>
-                <p id="warning_text">No highly relevant results found. The displayed results may not closely match your query.</p>
+    
+        <p id="tip">Insert an arXiv link or ID to find similar LHCb papers, or use natural language to describe what you are looking for.</p>
+    
+        <div id="loading_container" style="display: none;">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+    
+        <div id="container">
+            <form id="search_form" onsubmit="performSearch(); return false;">
+                <textarea id="query_field" class="placeholder_hidden" name="query" autocapitalize="off" 
+                    placeholder='e.g. "CP violation in B0 meson decays", "2409.03496" or "https://arxiv.org/abs/2409.03496"'></textarea>
+                <button id="search_button" type="submit">Search</button>
+            </form>
+    
+            <div id="error_container">
+                <div id="error_flex">
+                    <div id="error_symbol"></div>
+                    <p id="error_text">Error</p>
+                </div>
             </div>
-        </div>    
-        <div id="toggle_container">
-            <div id="toggle_flex">
-                <div class="toggle toggle_enabled" data-tab="papers">
-                    <p>Papers</p>
+    
+            <div id="warning_container" style="display: none;">
+                <div id="warning_flex">
+                    <div id="warning_symbol"></div>
+                    <p id="warning_text">No highly relevant results found. The displayed results may not closely match your query.</p>
                 </div>
-                <div class="toggle toggle_disabled" data-tab="people">
-                    <p>People</p>
+            </div>
+    
+            <!-- Main controls container -->
+            <div id="controls_container">
+                <!-- Tab toggles -->
+                <div id="toggle_container">
+                    <div id="toggle_flex">
+                        <div class="toggle toggle_enabled" data-tab="papers">
+                            <p>Papers</p>
+                        </div>
+                        <div class="toggle toggle_disabled" data-tab="people">
+                            <p>People</p>
+                        </div>
+                    </div>
                 </div>
+    
+                <!-- Sort toggle will be added dynamically -->
+                <!-- Results per page and pagination will be added dynamically -->
+            </div>
+    
+            <!-- Results container -->
+            <div id="results"></div>
+        </div>
+    
+        <footer class="footer">
+            <a href="https://lhcb.web.cern.ch/" target="_blank">LHCb</a>
+            <span>|</span>
+            <span>Created by <a href="https://melashri.net" target="_blank">Mohamed Elashri</a></span>
+            <span>|</span>
+            <a href="https://github.com/MohamedElashri/lhcb-search" target="_blank">GitHub</a>
+        </footer>
+    
+        <!-- Tooltip template for author info -->
+        <div id="author_info_template" style="display: none;">
+            <div class="info_container">
+                <p class="black">Based on your query, we retrieved 100 papers. Of those, <b>{author}</b> was (co-) author on <b>{count}</b>.</p>
             </div>
         </div>
-        <div id="sort_options" style="display: none;">
-            <div id="sort_flex">
-                <div class="toggle toggle_enabled" data-sort="similarity">
-                    <p>Sort by Similarity</p>
-                </div>
-                <div class="toggle" data-sort="year">
-                    <p>Sort by Year</p>
-                </div>
-            </div>
-        </div>
-        <div id="results"></div>
-    </div>
-    <footer class="footer">
-        <a href="https://lhcb.web.cern.ch/" target="_blank">LHCb</a>
-        <span>|</span>
-        <span>Created by <a href="https://melashri.net" target="_blank">Mohamed Elashri</a></span>
-        <span>|</span>
-        <a href="https://github.com/MohamedElashri/lhcb-search" target="_blank">GitHub</a>
-    </footer>
-</body>
-</html>
+    </body>

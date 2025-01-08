@@ -1,9 +1,13 @@
-$(window).bind("load", function () {
-    results = null;
-    currentTab = "papers";
-    currentSort = "similarity"; // Add sorting state
+// Global variables
+let results = null;
+let currentTab = "papers";
+let currentSort = "similarity";
+let currentPage = 1;
+let totalPages = 1;
+let resultsPerPage = 10;
 
-    f = document.getElementById("query_field");
+$(window).bind("load", function () {
+    const f = document.getElementById("query_field");
     f.style.height = "0px";
     f.style.height = f.scrollHeight + "px";
 
@@ -39,17 +43,13 @@ $(window).bind("load", function () {
     });
 
     // Toggle the right tab
-    tabGetParameter = findGetParameter("tab");
+    const tabGetParameter = findGetParameter("tab");
     if (tabGetParameter != null) {
-        if (tabGetParameter.toLowerCase() == "people") {
-            currentTab = "people";
-        } else {
-            currentTab = "papers";
-        }
+        currentTab = tabGetParameter.toLowerCase() === "people" ? "people" : "papers";
     }
 
     // Insert query if present as GET parameter
-    queryGetParameter = findGetParameter("q");
+    const queryGetParameter = findGetParameter("q");
     if (queryGetParameter != null) {
         $("#query_field").val(queryGetParameter);
         $("#query_field").trigger("input"); // trigger resize
@@ -79,6 +79,53 @@ $(window).bind("load", function () {
         });
     }
 });
+
+
+function addPageNumber(container, pageNum) {
+    const pageBtn = $("<div>")
+        .addClass("page-number")
+        .toggleClass("active", pageNum === currentPage)
+        .text(pageNum)
+        .on("click", () => goToPage(pageNum));
+    container.append(pageBtn);
+}
+
+function addEllipsis(container) {
+    container.append($("<span>").addClass("pagination-ellipsis").text("..."));
+}
+
+function addPaginationControls() {
+    const paginationHtml = `
+        <div id="results_controls">
+            <div id="results_per_page_flex">
+                <label for="results_per_page" class="results-label">Results per page:</label>
+                <select id="results_per_page" class="form-select">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="15">15</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+            <div id="pagination_flex">
+                <button id="prev_page" class="page-btn">Previous</button>
+                <div id="page_numbers"></div>
+                <button id="next_page" class="page-btn">Next</button>
+            </div>
+        </div>`;
+    
+    $("#sort_toggle_container").after(paginationHtml);
+    
+    // Add event listeners
+    $("#results_per_page").on("change", function() {
+        resultsPerPage = parseInt($(this).val());
+        currentPage = 1;  // Reset to first page when changing results per page
+        performSearch();
+    });
+    
+    $("#prev_page").on("click", () => goToPage(currentPage - 1));
+    $("#next_page").on("click", () => goToPage(currentPage + 1));
+}
 
 
 // Add sort toggle UI to the container div
@@ -112,11 +159,128 @@ function addSortToggle() {
     });
 }
 
+function performSearch() {
+    const field = document.getElementById("query_field");
+    field.style.animationName = "change_color";
+    field.readOnly = true;
+    $(field).blur();
+
+    $("#loading_container").show();
+    $("#results").hide();
+
+    let queryVal = $('textarea[name="query"]').val();
+
+    // Add pagination parameters to the request
+    $.getJSON("/search", { 
+        query: queryVal,
+        per_page: resultsPerPage,
+        page: currentPage
+    }, function(data) {
+        field.style.animationName = "";
+        field.readOnly = false;
+        $("#loading_container").hide();
+
+        if (data["error"] == null) {
+            results = data;
+            updateGetParameter(queryVal, currentTab);
+            $("#error_container").hide();
+            $("#warning_container").hide();
+            $("#tip").hide();
+
+            if (checkLowScores(data.papers)) {
+                $("#warning_container").show();
+            }
+
+            if (!$("#sort_toggle_container").length) {
+                addSortToggle();
+            }
+
+            if (!$("#results_controls").length) {
+                addPaginationControls();
+            }
+
+            updatePagination(data.pagination);
+
+            if (currentTab == "people") {
+                togglePeopleTab(true);
+            } else {
+                togglePapersTab(true);
+            }
+
+            $("#toggle_container").addClass("appear");
+            $("#results").show();
+        } else {
+            $("#error_text").text(data["error"]);
+            $("#error_container").show();
+            $("#warning_container").hide();
+        }
+    });
+}
+
+function updatePagination(pagination) {
+    currentPage = pagination.current_page;
+    totalPages = pagination.total_pages;
+    totalResults = pagination.total_results;  // Added to track total results
+    
+    // Update info text if needed
+    $("#results_info").text(`Showing ${totalResults} papers`);
+    
+    const prevButton = $("#prev_page");
+    const nextButton = $("#next_page");
+    const pageNumbers = $("#page_numbers");
+    
+    // Update button states
+    prevButton.prop("disabled", currentPage === 1);
+    nextButton.prop("disabled", currentPage === totalPages);
+    
+    // Clear existing page numbers
+    pageNumbers.empty();
+    
+    if (totalPages <= 7) {
+        // Show all pages if total is 7 or less
+        for (let i = 1; i <= totalPages; i++) {
+            addPageNumber(pageNumbers, i);
+        }
+    } else {
+        // Show first page
+        addPageNumber(pageNumbers, 1);
+        
+        // Add ellipsis and surrounding pages
+        if (currentPage <= 4) {
+            // Near start
+            for (let i = 2; i <= 5; i++) {
+                addPageNumber(pageNumbers, i);
+            }
+            addEllipsis(pageNumbers);
+            addPageNumber(pageNumbers, totalPages);
+        } else if (currentPage >= totalPages - 3) {
+            // Near end
+            addEllipsis(pageNumbers);
+            for (let i = totalPages - 4; i <= totalPages; i++) {
+                addPageNumber(pageNumbers, i);
+            }
+        } else {
+            // Middle
+            addEllipsis(pageNumbers);
+            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                addPageNumber(pageNumbers, i);
+            }
+            addEllipsis(pageNumbers);
+            addPageNumber(pageNumbers, totalPages);
+        }
+    }
+}
+
+function goToPage(page) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    performSearch();
+}
+
 function togglePapersTab(animated) {
     $('[data-tab="papers"]').first().addClass("toggle_enabled");
     $('[data-tab="people"]').first().removeClass("toggle_enabled");
     
-    // Show warning if needed when switching tabs
     $("#warning_container").toggle(checkLowScores(results.papers));
     
     if (animated) {
@@ -136,7 +300,7 @@ function togglePapersTab(animated) {
         const sortedPapers = sortPapers(results.papers, currentSort);
         addPapers(sortedPapers);
     }
-    queryVal = findGetParameter("q");
+    const queryVal = findGetParameter("q");
     currentTab = "papers";
     updateGetParameter(queryVal, currentTab);
 }
@@ -145,7 +309,6 @@ function togglePeopleTab(animated) {
     $('[data-tab="people"]').first().addClass("toggle_enabled");
     $('[data-tab="papers"]').first().removeClass("toggle_enabled");
     
-    // Hide warning when switching to people tab
     $("#warning_container").hide();
     
     if (animated) {
@@ -162,75 +325,22 @@ function togglePeopleTab(animated) {
     } else {
         addAuthors(results["authors"]);
     }
-    queryVal = findGetParameter("q");
+    const queryVal = findGetParameter("q");
     currentTab = "people";
     updateGetParameter(queryVal, currentTab);
 }
 
-function performSearch() {
-    const field = document.getElementById("query_field");
-    field.style.animationName = "change_color";
-    field.readOnly = true;
-    $(field).blur();
-
-    // Show loading animation
-    $("#loading_container").show();
-    $("#results").hide();
-
-    let queryVal = $('textarea[name="query"]').val();
-
-    $.getJSON("/search", { query: queryVal }, function (data) {
-        console.log(data);
-        field.style.animationName = "";
-        field.readOnly = false;
-
-        // Hide loading animation
-        $("#loading_container").hide();
-
-        if (data["error"] == null) {
-            results = data;
-            updateGetParameter(queryVal, currentTab);
-            $("#error_container").hide();
-            $("#warning_container").hide();
-            $("#tip").hide();
-
-            if (checkLowScores(data.papers)) {
-                $("#warning_container").show();
-            }
-            if (!$("#sort_toggle_container").length) {
-                addSortToggle();
-            }
-            if (currentTab == "people") {
-                togglePeopleTab(true);
-            } else {
-                togglePapersTab(true);
-            }
-            $("#toggle_container").addClass("appear");
-            $("#results").show();
-        } else {
-            $("#error_text").text(data["error"]);
-            $("#error_container").show();
-            $("#warning_container").hide();
-        }
-    });
-}
-
-
-// Function to sort papers
 function sortPapers(papers, sortType) {
     return [...papers].sort((a, b) => {
         if (sortType === "year") {
-            // First compare years
             const yearDiff = parseInt(b.year) - parseInt(a.year);
             if (yearDiff !== 0) return yearDiff;
-            // If years are same, compare months
             const months = {
                 "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
                 "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12
             };
             return months[b.month] - months[a.month];
         } else {
-            // Sort by similarity score (default)
             return b.score - a.score;
         }
     });
@@ -249,17 +359,17 @@ function findGetParameter(parameterName) {
 }
 
 function updateGetParameter(query, tab) {
-    protocol = window.location.protocol + "//";
-    host = window.location.host;
-    pathname = window.location.pathname;
-    queryParam = `?q=${encodeURIComponent(query)}`;
-    tabParam = `&tab=${encodeURIComponent(tab)}`;
-    newUrl = protocol + host + pathname + queryParam + tabParam;
+    const protocol = window.location.protocol + "//";
+    const host = window.location.host;
+    const pathname = window.location.pathname;
+    const queryParam = `?q=${encodeURIComponent(query)}`;
+    const tabParam = `&tab=${encodeURIComponent(tab)}`;
+    const newUrl = protocol + host + pathname + queryParam + tabParam;
     window.history.pushState({ path: newUrl }, '', newUrl);
 }
 
 function renderMath() {
-    let config = [
+    const config = [
         { left: "$$", right: "$$", display: true },
         { left: "$", right: "$", display: false }
     ];
@@ -285,8 +395,6 @@ function addPapers(data) {
 
 function addPaper(result) {
     let dotClass = result.score >= 0.80 ? "dot_green" : "dot_orange";
-    
-    // Format the authors string using our new function
     const formattedAuthors = formatAuthors(result.authors);
     
     return `<div class="search_result result_clickable" onclick="resultClicked(this)">
@@ -325,7 +433,6 @@ function addAuthors(authors) {
     $("#results").empty();
     var html = '<div id="authors_flex">';
     authors.forEach(author => {
-        // Get unique papers by ID
         const uniquePapers = Array.from(
             new Map(author.papers.map(paper => [paper.id, paper])).values()
         );
@@ -340,7 +447,7 @@ function addAuthors(authors) {
 
 function addAuthor(author) {
     let dotClass = author.avg_score >= 0.80 ? "dot_green" : "dot_orange";
-    html = `<div class="author_container">
+    let html = `<div class="author_container">
         <div class="author_top_row">
             <p class="author_name black">${author.author}</p>
             <div class="result_score black" title="Average cosine similarity">
@@ -356,7 +463,6 @@ function addAuthor(author) {
             <p class="black">Based on your query, we retrieved 100 papers. Of those, <b>${author.author}</b> was (co-) author on <b>${author.papers.length}</b>.</p>
         </div>`;
     author.papers.forEach(paper => {
-        // Format authors for each paper in the author view
         const formattedAuthors = formatAuthors(paper.authors);
         html += `
         <div class="author_paper_container">
@@ -369,21 +475,21 @@ function addAuthor(author) {
 }
 
 function infoHover(elem) {
-    pos = $(elem).position();
-    width = $(elem).width();
-    height = $(elem).height();
-    offsetLeft = $(elem).offset().left;
-    infoAuthor = elem.dataset.author;
+    const pos = $(elem).position();
+    const width = $(elem).width();
+    const height = $(elem).height();
+    const offsetLeft = $(elem).offset().left;
+    const infoAuthor = elem.dataset.author;
     $(".info_container").each(function(i, obj) {
-        containerAuthor = obj.dataset.author;
+        const containerAuthor = obj.dataset.author;
         if (infoAuthor != containerAuthor) return;
-        centerX = pos.left + width / 2;
-        bottomY = pos.top + height;
-        containerWidth = $(obj).width();
-        left = centerX-containerWidth/2;
-        minLeftMargin = 10;
+        const centerX = pos.left + width / 2;
+        const bottomY = pos.top + height;
+        const containerWidth = $(obj).width();
+        let left = centerX-containerWidth/2;
+        const minLeftMargin = 10;
         if (left < minLeftMargin) {
-            diff = minLeftMargin - left;
+            const diff = minLeftMargin - left;
             $(obj).css({top: bottomY+10+"px", left: left+diff/2+"px", display: "block"});
         } else {
             $(obj).css({top: bottomY+10+"px", left: left+"px", display: "block"});
@@ -397,36 +503,26 @@ function infoLeave() {
     });
 }
 
-// Add this new function to format authors
 function formatAuthors(authorString) {
-    // Split authors by comma and clean up whitespace
     const authors = authorString.split(',').map(author => author.trim());
     
-    // Check for collaboration
     const collaborationIndex = authors.findIndex(author => 
         author.toLowerCase().includes('collaboration'));
     
     if (collaborationIndex !== -1) {
-        // Return just the collaboration name
         return authors[collaborationIndex];
     }
     
-    // If no collaboration found, handle based on author count
     if (authors.length <= 5) {
-        // For 1-5 authors, show all
         return authors.join(', ');
     } else {
-        // For more than 5 authors, show first author + et al.
         return `${authors[0]} et al.`;
     }
 }
 
-
 // Theme handling
 function initializeTheme() {
-    // Check if user has a saved preference
     let savedTheme = localStorage.getItem('theme');
-    // If no saved preference, check system preference
     if (!savedTheme) {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         savedTheme = prefersDark ? 'dark' : 'light';
@@ -445,19 +541,9 @@ function toggleTheme() {
 
 function updateThemeToggleButton(theme) {
     const button = document.querySelector('.theme-toggle');
-    if (theme === 'dark') {
-        button.textContent = '☀️';
-    } else {
-        button.textContent = '🌙';
-    }
+    button.textContent = theme === 'dark' ? '☀️' : '🌙';
 }
-
-// Initialize theme on page load
-document.addEventListener('DOMContentLoaded', initializeTheme);
-
 
 function checkLowScores(papers) {
-    // Check if any paper has a score higher than 0.2
     return !papers.some(paper => paper.score > 0.2);
 }
-
