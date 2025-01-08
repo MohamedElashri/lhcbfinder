@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- Basic Meta Tags -->
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        
+        <!-- Primary Meta Tags -->
+        <title>LHCb Papers Search | Find Research Papers from CERN's LHCb Experiment</title>
+        <meta name="title" content="LHCb Papers Search | Find Research Papers from CERN's LHCb Experiment">
+        <meta name="description" content="Search and discover LHCb experiment papers using semantic search. Find research on particle physics, B mesons, CP violation, and dark matter from CERN's LHCb collaboration.">
+        <meta name="keywords" content="LHCb, CERN, particle physics, research papers, arxiv, B mesons, CP violation, dark matter, semantic search">
+        <meta name="author" content="Mohamed Elashri">
+        <meta name="language" content="English">
+        <meta name="robots" content="index, follow">
+    
+        <!-- Open Graph / Facebook -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://lhcbfinder.net/">
+        <meta property="og:title" content="LHCb Papers Search | Find Research Papers from CERN's LHCb Experiment">
+        <meta property="og:description" content="Search and discover LHCb experiment papers using semantic search. Find research on particle physics, B mesons, CP violation, and dark matter from CERN's LHCb collaboration.">
+        <meta property="og:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Twitter -->
+        <meta property="twitter:card" content="summary_large_image">
+        <meta property="twitter:url" content="https://lhcbfinder.net/">
+        <meta property="twitter:title" content="LHCb Papers Search | Find Research Papers from CERN's LHCb Experiment">
+        <meta property="twitter:description" content="Search and discover LHCb experiment papers using semantic search. Find research on particle physics, B mesons, CP violation, and dark matter from CERN's LHCb collaboration.">
+        <meta property="twitter:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://lhcbfinder.net/">
+    
+        <!-- Favicon -->
+        <link rel="icon" type="image/x-icon" href="static/favicon.png">
+    
+        <!-- Stylesheets -->
+        <link rel="stylesheet" type="text/css" href="static/styles.css">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css" integrity="sha384-vKruj+a13U8yHIkAyGgK1J3ArTLzrFGBbBc0tDp4ad/EyewESeXE/Iv67Aj8gKZ0" crossorigin="anonymous">
+    
+        <!-- Preload Assets -->
+        <link rel=preload href="/static/go-to-symbol.svg" as=image>
+        <link rel=preload href="/static/similarity-symbol.svg" as=image>
+        <link rel=preload href="/static/error-symbol.svg" as=image>
+        <link rel=preload href="/static/info-symbol.svg" as=image>
+    
+        <!-- Scripts -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.js" integrity="sha384-PwRUT/YqbnEjkZO0zZxNqcxACrXe+j766U2amXcgMg5457rve2Y7I6ZJSm2A0mS4" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
+        <script src="/static/script.js"></script>
+    
+        <!-- JSON-LD Structured Data -->
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "LHCb Papers Search",
+            "url": "https://lhcbfinder.net",
+            "description": "Search and discover LHCb experiment papers using semantic search. Find research on particle physics, B mesons, CP violation, and dark matter from CERN's LHCb collaboration.",
+            "author": {
+                "@type": "Person",
+                "name": "Mohamed Elashri",
+                "url": "https://melashri.net"
+            },
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://lhcbfinder.net/?query={search_term_string}",
+                "query-input": "required name=search_term_string"
+            }
+        }
+        </script>
+    </head>
+    
+    <body>
+    <div id="header">
+        <a id="logo" href="/">
+            <span class="black">search</span><span class="gray">LHCb</span><span class="red">papers</span>
+        </a>
+        <div id="right_header">
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span class="theme-toggle-text">🌙</span>
+            </button>
+            <a class="header_link" href="about"><span class="black">about</span></a>
+        </div>
+    </div>
+    <p id="tip">Insert an arXiv link to find similar LHCb papers or use natural language to describe what you are looking for.</p>
+    <div id="loading_container" style="display: none;">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+    </div>
+    <div id="container">
+        <form id="search_form" onsubmit="performSearch(); return false;">
+            <textarea id="query_field" class="placeholder_hidden" name="query" autocapitalize="off" 
+            placeholder='e.g. "CP violation in B0 meson decays" or "Dark Matter searches at LHCb"'></textarea>
+            <button id="search_button" type="submit">Search</button>
+        </form>
+        <div id="error_container">
+            <div id="error_flex">
+                <div id="error_symbol"></div>
+                <p id="error_text">Error</p>
+            </div>
+        </div>
+        <div id="warning_container" style="display: none;">
+            <div id="warning_flex">
+                <div id="warning_symbol"></div>
+                <p id="warning_text">No highly relevant results found. The displayed results may not closely match your query.</p>
+            </div>
+        </div>    
+        <div id="toggle_container">
+            <div id="toggle_flex">
+                <div class="toggle toggle_enabled" data-tab="papers">
+                    <p>Papers</p>
+                </div>
+                <div class="toggle toggle_disabled" data-tab="people">
+                    <p>People</p>
+                </div>
+            </div>
+        </div>
+        <div id="sort_options" style="display: none;">
+            <div id="sort_flex">
+                <div class="toggle toggle_enabled" data-sort="similarity">
+                    <p>Sort by Similarity</p>
+                </div>
+                <div class="toggle" data-sort="year">
+                    <p>Sort by Year</p>
+                </div>
+            </div>
+        </div>
+        <div id="results"></div>
+    </div>
+    <footer class="footer">
+        <a href="https://lhcb.web.cern.ch/" target="_blank">LHCb</a>
+        <span>|</span>
+        <span>Created by <a href="https://melashri.net" target="_blank">Mohamed Elashri</a></span>
+        <span>|</span>
+        <a href="https://github.com/MohamedElashri/lhcb-search" target="_blank">GitHub</a>
+    </footer>
+</body>
+</html>

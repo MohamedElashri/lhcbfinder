@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- Basic Meta Tags -->
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        
+        <!-- Primary Meta Tags -->
+        <title>About LHCb Papers Search | How Our Semantic Search Works</title>
+        <meta name="title" content="About LHCb Papers Search | How Our Semantic Search Works">
+        <meta name="description" content="Learn how LHCb Papers Search uses BAAI/bge-large-en-v1.5 model to provide semantic search capabilities for LHCb experiment research papers from arXiv.">
+        <meta name="keywords" content="LHCb search, semantic search, BAAI/bge-large-en-v1.5, arxiv papers, CERN research, particle physics search">
+        <meta name="author" content="Mohamed Elashri">
+        <meta name="language" content="English">
+        <meta name="robots" content="index, follow">
+    
+        <!-- Open Graph / Facebook -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://lhcbfinder.net/about">
+        <meta property="og:title" content="About LHCb Papers Search | How Our Semantic Search Works">
+        <meta property="og:description" content="Learn how LHCb Papers Search uses BAAI/bge-large-en-v1.5 model to provide semantic search capabilities for LHCb experiment research papers from arXiv.">
+        <meta property="og:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Twitter -->
+        <meta property="twitter:card" content="summary_large_image">
+        <meta property="twitter:url" content="https://lhcbfinder.net/about">
+        <meta property="twitter:title" content="About LHCb Papers Search | How Our Semantic Search Works">
+        <meta property="twitter:description" content="Learn how LHCb Papers Search uses BAAI/bge-large-en-v1.5 model to provide semantic search capabilities for LHCb experiment research papers from arXiv.">
+        <meta property="twitter:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://lhcbfinder.net/about">
+    
+        <!-- Favicon -->
+        <link rel="icon" type="image/x-icon" href="static/favicon.png">
+    
+        <!-- Stylesheets -->
+        <link rel="stylesheet" type="text/css" href="static/styles.css">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    
+        <!-- Scripts -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js" crossorigin="anonymous"></script>
+        <script src="/static/script.js"></script>
+    
+        <!-- JSON-LD Structured Data -->
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "AboutPage",
+            "name": "About LHCb Papers Search",
+            "url": "https://lhcbfinder.net/about",
+            "description": "Learn how LHCb Papers Search uses BAAI/bge-large-en-v1.5 model to provide semantic search capabilities for LHCb experiment research papers from arXiv.",
+            "mainEntity": {
+                "@type": "WebSite",
+                "name": "LHCb Papers Search",
+                "url": "https://lhcbfinder.net",
+                "author": {
+                    "@type": "Person",
+                    "name": "Mohamed Elashri",
+                    "url": "https://melashri.net"
+                }
+            }
+        }
+        </script>
+    </head>
+
+<body>
+    <div id="header">
+        <a id="logo" href="/">
+            <span class="black">search</span><span class="gray">LHCb</span><span class="red">papers</span>
+        </a>
+        <div id="right_header">
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span class="theme-toggle-text">🌙</span>
+            </button>
+            <a class="header_link" href="about"><span class="black">about</span></a>
+        </div>
+    </div>
+    <div id="container">
+        <p id="about_title" class="black">about this website</p>
+        <p class="about_text black"><span class="black">search</span><span class="gray">LHCb</span><span class="red">papers</span> uses the <span class="code">BAAI/bge-large-en-v1.5</span> model to embed the abstracts of LHCb-related papers from arXiv. The papers are regularly sourced from the <a href="https://www.kaggle.com/datasets/Cornell-University/arxiv" target="_blank">arXiv metadataset over on Kaggle</a> and filtered to include only those related to LHCb experiment.</p>
+        <p class="about_text black">When you perform a search, your query is embedded using the same model after which the 10 papers with the highest cosine similarity to the query embedding are returned.</p>
+        <p class="about_text black">The website is built using flask and hosted on a modest VPS. The source code is available on <a href="https://github.com/MohamedElashri/lhcb-search" target="_blank">GitHub</a>.</p>
+        <p class="about_text black">If you have any questions or suggestions, feel free to reach out to me at mohamed.elashri [at] cern.ch </p>
+        <p class="about_text black">The frontend is forked from open source project  <a href="https://github.com/augustwester/searchthearxiv" target="_blank">searchthearXiv</a></p>
+
+    </div>
+    <footer class="footer">
+        <a href="https://lhcb.web.cern.ch/" target="_blank">LHCb</a>
+        <span>|</span>
+        <span>Created by <a href="https://melashri.net" target="_blank">Mohamed Elashri</a></span>
+        <span>|</span>
+        <a href="https://github.com/MohamedElashri/lhcbfinder" target="_blank">GitHub</a>
+    </footer>
+</body>
+</html>
