@@ -91,41 +91,80 @@
         </div>
     </div>
     <div id="container">
-        <h1 id="about_title">About This Project</h1>
+        <h1 id="about_title">About LHCb Papers Search</h1>
         
         <div class="about-content">
-            <p class="about_text">
-                <span style="color: var(--cern-blue)">LHCb</span>
-                <span style="color: var(--cern-red)">Papers</span>
-                <span style="color: var(--text-color)">Search</span> 
-                uses the <span class="code">BAAI/bge-large-en-v1.5</span> model to embed the abstracts of LHCb-related papers from arXiv.
-            </p>
-            
-            <p class="about_text">
-                The papers are regularly sourced from the 
-                <a href="https://www.kaggle.com/datasets/Cornell-University/arxiv" target="_blank">arXiv metadataset over on Kaggle</a> 
-                and filtered to include only those related to LHCb experiment.
-            </p>
-            
-            <p class="about_text">
-                When you perform a search, your query is embedded using the same model after which the 10 papers 
-                with the highest cosine similarity to the query embedding are returned.
-            </p>
-            
-            <p class="about_text">
-                The website is built using Flask and hosted on a modest VPS. The source code is available on 
-                <a href="https://github.com/MohamedElashri/lhcbfinder" target="_blank">GitHub</a>.
-            </p>
-            
-            <p class="about_text">
-                If you have any questions or suggestions, feel free to reach out to me at 
-                mohamed.elashri [at] cern.ch
-            </p>
-            
-            <p class="about_text">
-                The frontend is forked from the open source project 
-                <a href="https://github.com/augustwester/searchthearxiv" target="_blank">searchthearXiv</a>
-            </p>
+            <!-- Project Overview -->
+            <section class="about-section">
+                <h2>Project Overview</h2>
+                <p class="about_text">
+                    <span style="color: var(--cern-blue)">LHCb</span>
+                    <span style="color: var(--cern-red)">Papers</span>
+                    <span style="color: var(--text-color)">Search</span> 
+                    is a specialized sematnic search engine designed to help find relevant papers from the LHCb experiment at CERN.
+                </p>
+            </section>
+
+            <!-- Motivation -->
+            <section class="about-section">
+                <h2>Motivation</h2>
+                <p class="about_text">
+                    With thousands of papers published by LHCb collaboration or about LHCb, finding relevant research can be challenging.
+                    Traditional keyword searches often miss semantically related content. This project aims to make LHCb research
+                    more accessible through advanced semantic search capabilities.
+                </p>
+            </section>
+
+            <!-- How It Works -->
+            <section class="about-section">
+                <h2>How It Works</h2>
+                <p class="about_text">
+                    <strong>1. Semantic Embeddings:</strong> We use the <span class="code">BAAI/bge-large-en-v1.5</span> model
+                    to convert paper abstracts into high-dimensional vectors that capture their semantic meaning.
+                </p>
+                <p class="about_text">
+                    <strong>2. Vector Search:</strong> When you search, your query is converted into the same vector space.
+                    We then find papers whose vectors have the highest cosine similarity to your query vector.
+                </p>
+                <p class="about_text">
+                    <strong>3. Real-time Results:</strong> The K ( K= 50 currently) most semantically similar papers are returned, ranked by
+                    their similarity scores.
+                </p>
+            </section>
+
+            <!-- Technical Details -->
+            <section class="about-section">
+                <h2>Technical Implementation</h2>
+                <p class="about_text">
+                    Papers are sourced from the 
+                    <a href="https://www.kaggle.com/datasets/Cornell-University/arxiv" target="_blank">arXiv dataset on Kaggle</a> 
+                    and filtered for LHCb-related content. The embeddings are stored in a vector database for efficient similarity search.
+                </p>
+                <p class="about_text">
+                    The website is built using Flask for the backend, with modern HTML/CSS/JS for the frontend. The entire system
+                    runs on a VPS for consistent availability.
+                </p>
+            </section>
+
+            <!-- Open Source -->
+            <section class="about-section">
+                <h2>Open Source</h2>
+                <p class="about_text">
+                    The complete source code is available on 
+                    <a href="https://github.com/MohamedElashri/lhcbfinder" target="_blank">GitHub</a>. 
+                    The frontend is based on the open-source project 
+                    <a href="https://github.com/augustwester/searchthearxiv" target="_blank">searchthearXiv</a>.
+                </p>
+            </section>
+
+            <!-- Contact -->
+            <section class="about-section">
+                <h2>Contact</h2>
+                <p class="about_text">
+                    If you have questions, suggestions, or feedback, please reach out to me at 
+                    mohamed.elashri [at] cern.ch
+                </p>
+            </section>
         </div>
     </div>
     

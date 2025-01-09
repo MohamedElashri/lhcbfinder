@@ -1239,6 +1239,46 @@ p, a {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Enhanced About Page Styles */
+.about-section {
+    margin-bottom: 3rem;
+}
+
+.about-section:last-child {
+    margin-bottom: 0;
+}
+
+.about-section h2 {
+    font-family: 'PT Sans', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--cern-blue);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.about-section .about_text {
+    margin-bottom: 1rem;
+}
+
+.about-section .about_text strong {
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+/* Adjust spacing for mobile */
+@media screen and (max-width: 768px) {
+    .about-section {
+        margin-bottom: 2rem;
+    }
+
+    .about-section h2 {
+        font-size: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+}
+
 /* Tablet adjustments */
 @media screen and (min-width: 769px) and (max-width: 1024px) {
     #container {
