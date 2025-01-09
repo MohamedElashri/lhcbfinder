@@ -1,6 +1,5 @@
 // Global variables
 let results = null;
-let currentTab = "papers";
 let currentSort = "similarity";
 let currentPage = 1;
 let totalPages = 1;
@@ -34,21 +33,6 @@ $(window).bind("load", function () {
         this.style.height = (this.scrollHeight) + "px";
     });
 
-    // Handle toggling between papers and authors tabs
-    $(".toggle").on("click", function () {
-        if (this.dataset.tab == "papers") {
-            togglePapersTab(true);
-        } else {
-            togglePeopleTab(true);
-        }
-    });
-
-    // Toggle the right tab
-    const tabGetParameter = findGetParameter("tab");
-    if (tabGetParameter != null) {
-        currentTab = tabGetParameter.toLowerCase() === "people" ? "people" : "papers";
-    }
-
     // Insert query if present as GET parameter
     const queryGetParameter = findGetParameter("q");
     if (queryGetParameter != null) {
@@ -79,6 +63,28 @@ $(window).bind("load", function () {
             }
         });
     }
+
+    // Add viewport height fix
+    setViewportHeight();
+    window.addEventListener('resize', setViewportHeight);
+    
+    // Better textarea handling for mobile
+    const queryField = document.getElementById("query_field");
+    queryField.addEventListener('input', () => adjustTextareaHeight(queryField));
+    
+    // Disable animations on mobile if reduced motion is preferred
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.documentElement.classList.add('reduce-motion');
+    }
+    
+    // Handle mobile keyboard appearance
+    if (isMobileDevice()) {
+        window.addEventListener('resize', function() {
+            if (document.activeElement.tagName === 'TEXTAREA') {
+                window.scrollTo(0, 0);
+            }
+        });
+    }
 });
 
 function addPageNumber(container, pageNum) {
@@ -93,11 +99,7 @@ function addPageNumber(container, pageNum) {
             $(".page-number").removeClass("active"); // Remove from all
             $(pageBtn).addClass("active"); // Add to the clicked button
 
-            if (currentTab === "papers") {
-                addPapers(sortedPapers);
-            } else {
-                addAuthors(results.authors);
-            }
+            addPapers(sortedPapers);
         });
 
     // Check if this button is for the current page and add 'active' class if so
@@ -142,22 +144,14 @@ function addPaginationControls() {
         totalPages = Math.ceil(sortedPapers.length / resultsPerPage);
 
         updatePagination();
-        if (currentTab === "papers") {
-            addPapers(sortedPapers);
-        } else {
-            addAuthors(results.authors);
-        }
+        addPapers(sortedPapers);
     });
 
     $("#prev_page").on("click", () => {
         if (currentPage > 1) {
             currentPage--;
             updatePagination();
-            if (currentTab === "papers") {
-                addPapers(sortedPapers);
-            } else {
-                addAuthors(results.authors);
-            }
+            addPapers(sortedPapers);
         }
     });
 
@@ -165,11 +159,7 @@ function addPaginationControls() {
         if (currentPage < totalPages) {
             currentPage++;
             updatePagination();
-            if (currentTab === "papers") {
-                addPapers(sortedPapers);
-            } else {
-                addAuthors(results.authors);
-            }
+            addPapers(sortedPapers);
         }
     });
 }
@@ -231,7 +221,7 @@ function performSearch() {
             sortedPapers = [...data.papers];
             // Sort the papers based on the current sort setting
             sortPapers(currentSort);
-            updateGetParameter(queryVal, currentTab);
+            updateGetParameter(queryVal); // Remove tab parameter
             $("#error_container").hide();
             $("#warning_container").hide();
             $("#tip").hide();
@@ -253,13 +243,8 @@ function performSearch() {
             updatePagination();
 
             // Display the results based on the current tab
-            if (currentTab === "people") {
-                togglePeopleTab(false); // Assuming you want to skip animation on initial load
-            } else {
-                togglePapersTab(false); // Assuming you want to skip animation on initial load
-            }
+            addPapers(sortedPapers);
 
-            $("#toggle_container").addClass("appear");
             $("#results").show();
         } else {
             $("#error_text").text(data["error"]);
@@ -267,6 +252,11 @@ function performSearch() {
             $("#warning_container").hide();
         }
     });
+
+    if (isMobileDevice()) {
+        document.activeElement.blur(); // Hide mobile keyboard
+        window.scrollTo(0, 0); // Scroll to top for results
+    }
 }
 
 function updatePagination() {
@@ -309,57 +299,6 @@ function updatePagination() {
     }
 }
 
-function togglePapersTab(animated) {
-    $('[data-tab="papers"]').first().addClass("toggle_enabled");
-    $('[data-tab="people"]').first().removeClass("toggle_enabled");
-    $("#warning_container").toggle(checkLowScores(results.papers));
-
-    if (animated) {
-        if ($("#results").hasClass("move_up")) {
-            $("#results").removeClass("move_up");
-            $("#results").on("transitionend", function () {
-                addPapers(sortedPapers);
-                $("#results").addClass("move_up");
-            });
-        } else {
-            addPapers(sortedPapers);
-            $("#results").addClass("move_up");
-        }
-    } else {
-        addPapers(sortedPapers);
-    }
-
-    const queryVal = findGetParameter("q");
-    currentTab = "papers";
-    updateGetParameter(queryVal, currentTab);
-}
-
-function togglePeopleTab(animated) {
-    $('[data-tab="people"]').first().addClass("toggle_enabled");
-    $('[data-tab="papers"]').first().removeClass("toggle_enabled");
-    $("#warning_container").hide();
-
-    if (animated) {
-        if ($("#results").hasClass("move_up")) {
-            $("#results").removeClass("move_up");
-            $("#results").on("transitionend", function () {
-                // Assuming results.authors is already an array of author objects
-                addAuthors(results.authors);
-                $("#results").addClass("move_up");
-            });
-        } else {
-            addAuthors(results.authors);
-            $("#results").addClass("move_up");
-        }
-    } else {
-        addAuthors(results.authors);
-    }
-
-    const queryVal = findGetParameter("q");
-    currentTab = "people";
-    updateGetParameter(queryVal, currentTab);
-}
-
 function sortPapers(sortType) {
     if (!results || !results.papers) return;
 
@@ -390,13 +329,12 @@ function findGetParameter(parameterName) {
     return result;
 }
 
-function updateGetParameter(query, tab) {
+function updateGetParameter(query) {
     const protocol = window.location.protocol + "//";
     const host = window.location.host;
     const pathname = window.location.pathname;
     const queryParam = `?q=${encodeURIComponent(query)}`;
-    const tabParam = `&tab=${encodeURIComponent(tab)}`;
-    const newUrl = protocol + host + pathname + queryParam + tabParam;
+    const newUrl = protocol + host + pathname + queryParam;
     window.history.pushState({ path: newUrl }, '', newUrl);
 }
 
@@ -464,79 +402,6 @@ function addPaper(result) {
     </div>`;
 }
 
-function addAuthors(authors) {
-    $("#results").empty();
-    const authorsToDisplay = authors.slice(0, 10); // Get the first 10 authors
-    var html = '<div id="authors_flex">';
-    authorsToDisplay.forEach(author => {
-        const uniquePapers = Array.from(new Map(author.papers.map(paper => [paper.id, paper])).values());
-        const authorWithUniquePapers = {...author, papers: uniquePapers};
-        html += addAuthor(authorWithUniquePapers);
-    });
-    html += '</div>';
-    $("#results").append(html);
-    $("#results").addClass("move_up");
-    renderMath();
-}
-
-function addAuthor(author) {
-    let dotClass = author.avg_score >= 0.80 ? "dot_green" : "dot_orange";
-    let html = `<div class="author_container">
-        <div class="author_top_row">
-            <p class="author_name black">${author.author}</p>
-            <div class="result_score black" title="Average cosine similarity">
-                <p>${author.avg_score}</p>
-                <div class="result_dot ${dotClass}"></div>
-            </div>
-        </div>
-        <div class="num_papers_container">
-            <div class="author_num_papers_info_symbol" data-author="${author.author}" onmouseover="infoHover(this)" onmouseout="infoLeave()"></div>
-            <p class="author_num_papers black">${author.papers.length} matching papers</p>
-        </div>
-        <div class="info_container" data-author="${author.author}">
-            <p class="black">Based on your query, we retrieved 100 papers. Of those, <b>${author.author}</b> was (co-) author on <b>${author.papers.length}</b>.</p>
-        </div>`;
-    author.papers.forEach(paper => {
-        const formattedAuthors = formatAuthors(paper.authors);
-        html += `
-        <div class="author_paper_container">
-            <a href="https://arxiv.org/abs/${paper.id}" class="author_paper" target="_blank">${paper.title}</a>
-            <p class="author_paper_authors">${formattedAuthors}</p>
-        </div>`;
-    });
-    html += "</div>";
-    return html;
-}
-
-function infoHover(elem) {
-    const pos = $(elem).position();
-    const width = $(elem).width();
-    const height = $(elem).height();
-    const offsetLeft = $(elem).offset().left;
-    const infoAuthor = elem.dataset.author;
-    $(".info_container").each(function(i, obj) {
-        const containerAuthor = obj.dataset.author;
-        if (infoAuthor != containerAuthor) return;
-        const centerX = pos.left + width / 2;
-        const bottomY = pos.top + height;
-        const containerWidth = $(obj).width();
-        let left = centerX-containerWidth/2;
-        const minLeftMargin = 10;
-        if (left < minLeftMargin) {
-            const diff = minLeftMargin - left;
-            $(obj).css({top: bottomY+10+"px", left: left+diff/2+"px", display: "block"});
-        } else {
-            $(obj).css({top: bottomY+10+"px", left: left+"px", display: "block"});
-        }
-    });
-}
-
-function infoLeave() {
-    $(".info_container").each(function(i, obj) {
-        $(obj).hide();
-    });
-}
-
 function formatAuthors(authorString) {
     const authors = authorString.split(',').map(author => author.trim());
     
@@ -580,4 +445,24 @@ function updateThemeToggleButton(theme) {
 
 function checkLowScores(papers) {
     return !papers.some(paper => paper.score > 0.2);
+}
+
+// Add mobile detection and handling
+function isMobileDevice() {
+    return (
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (navigator.maxTouchPoints && navigator.maxTouchPoints > 2)
+    );
+}
+
+// Update textarea height calculation
+function adjustTextareaHeight(textarea) {
+    textarea.style.height = '0';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+}
+
+// Add viewport height fix for mobile browsers
+function setViewportHeight() {
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
 }
