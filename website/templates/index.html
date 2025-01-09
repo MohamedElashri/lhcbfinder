@@ -48,6 +48,15 @@
         <link rel=preload href="/static/error-symbol.svg" as=image>
         <link rel=preload href="/static/info-symbol.svg" as=image>
     
+        <script>
+            // Apply theme immediately to prevent flash of wrong theme
+            (function() {
+                const savedTheme = localStorage.getItem('theme') || 
+                                 (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            })();
+        </script>
+    
         <!-- Scripts -->
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js" crossorigin="anonymous"></script>
         <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.js" integrity="sha384-PwRUT/YqbnEjkZO0zZxNqcxACrXe+j766U2amXcgMg5457rve2Y7I6ZJSm2A0mS4" crossorigin="anonymous"></script>

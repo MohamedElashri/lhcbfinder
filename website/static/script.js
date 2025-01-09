@@ -7,6 +7,9 @@ let resultsPerPage = 10;
 let sortedPapers = []; // Array to store the sorted papers
 
 $(window).bind("load", function () {
+    // Initialize theme first before any other operations
+    initializeTheme();
+
     const f = document.getElementById("query_field");
     f.style.height = "0px";
     f.style.height = f.scrollHeight + "px";
@@ -425,6 +428,7 @@ function initializeTheme() {
     if (!savedTheme) {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         savedTheme = prefersDark ? 'dark' : 'light';
+        localStorage.setItem('theme', savedTheme); // Save the initial theme
     }
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeToggleButton(savedTheme);
