@@ -8,6 +8,10 @@ This is currently more of a proof of concept and I plan to improve the search re
 
 a demo of the project is available on my website hosted on a humble server [here](https://lhcbfinder.net/)
 
+![LHCb Finder Demo](img/lhcbfinder.gif)
+
+
+
 There are two main parts of this project:
 
 ## pipeline
