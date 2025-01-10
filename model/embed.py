@@ -15,7 +15,6 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 from vector_store import create_vector_store
 
 
-print("Starting script execution")
 
 def download_new_pdfs(papers, output_dir, force_download: bool = False):
     print("Entering download_new_pdfs function")
@@ -245,7 +244,6 @@ def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]],
 
 
 def main():
-    print("Starting script execution")
     required_env_vars = ["PINECONE_API_KEY", "PINECONE_INDEX_NAME"]
     missing_vars = [var for var in required_env_vars if var not in os.environ]
     if missing_vars:
@@ -405,6 +403,6 @@ def main():
     print("\n✅ Pipeline complete successfully")
     
 if __name__ == "__main__":
-    print("Starting script execution")
+    print("Starting embedding execution")
     main()
     print("Script finished")
