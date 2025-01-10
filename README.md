@@ -37,8 +37,8 @@ The website component can be run either locally using Python or via Docker. Both
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/MohamedElashri/lhcb-search.git
-cd lhcb-search/website
+git clone https://github.com/MohamedElashri/lhcbfinder.git
+cd lhcbfinder/website
 ```
 
 2. Create and activate a virtual environment (optional but recommended):
