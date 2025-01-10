@@ -6,6 +6,7 @@ from paper import Paper
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from vector_store import create_vector_store
 
 def count_lines(file_path):
     """Count total lines in a file for progress bar."""
@@ -68,34 +69,19 @@ def filter_lhcb_papers(papers):
     return lhcb_papers
 
 def pinecone_embedding_count(index_name):
-    """
-    Helper function to get the total number of embeddings stored in the Pinecone
-    index with the name specified in `index_name`.
-    """
-    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-    index = pc.Index(index_name)
-    stats = index.describe_index_stats()
-    return stats["total_vector_count"]
-
-def get_local_embeddings(texts, model_name="sentence-transformers/all-MiniLM-L6-v2", batch_size=32):
-    """
-    Embeds a list of texts locally with a Sentence Transformers model.
-    Now with progress bar for batches.
-    """
-    model = SentenceTransformer(model_name)
-    all_embeddings = []
+    """Get total number of embeddings stored in the vector store."""
+    use_pinecone = os.getenv("USE_PINECONE", "true").lower() == "true"
+    use_qdrant = os.getenv("USE_QDRANT", "false").lower() == "true"
+    qdrant_collection = os.getenv("QDRANT_COLLECTION", "lhcb_papers")
     
-    num_batches = (len(texts) + batch_size - 1) // batch_size
-    progress_bar = tqdm(total=len(texts), desc="Creating embeddings")
+    vector_store = create_vector_store(
+        use_pinecone=use_pinecone,
+        use_qdrant=use_qdrant,
+        pinecone_index=index_name,
+        qdrant_collection=qdrant_collection
+    )
     
-    for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i : i + batch_size]
-        batch_embeddings = model.encode(batch_texts)
-        all_embeddings.extend(batch_embeddings)
-        progress_bar.update(len(batch_texts))
-    
-    progress_bar.close()
-    return np.array(all_embeddings)
+    return vector_store.get_total_vectors()
 
 def embed_and_upsert_lhcb(papers, index_name, model_name="sentence-transformers/all-MiniLM-L6-v2", batch_size=50):
     """

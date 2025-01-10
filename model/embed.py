@@ -12,6 +12,8 @@ from helpers import load_data, filter_lhcb_papers, pinecone_embedding_count
 from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone
 from kaggle.api.kaggle_api_extended import KaggleApi
+from vector_store import create_vector_store
+
 
 print("Starting script execution")
 
@@ -181,8 +183,11 @@ def get_papers_needing_embeddings(papers: List, index_name: str, kaggle_file: st
     print(f"Found {len(papers_to_process)} papers to process")
     return papers_to_process, is_new_index
 
-def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_name: str, kaggle_file: str, batch_size: int = 50):
-    """Store embeddings both in Pinecone and locally for Kaggle."""
+def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], 
+                    index_name: str,
+                    kaggle_file: str, 
+                    batch_size: int = 50):
+    """Store embeddings both in vector store(s) and locally for Kaggle."""
     if not embedding_data:
         print("No new embeddings to store.")
         return
@@ -206,18 +211,26 @@ def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_
         print(f"Error saving embeddings locally: {str(e)}")
         raise
     
-    # Second: Upload to Pinecone in batches
-    print("Uploading embeddings to Pinecone...")
-    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-    index = pc.Index(index_name)
+    # Second: Upload to vector store(s)
+    print("Uploading embeddings to vector store(s)...")
     
-    vectors = [(id_, emb, meta) for id_, emb, meta in embedding_data]
+    use_pinecone = os.getenv("USE_PINECONE", "true").lower() == "true"
+    use_qdrant = os.getenv("USE_QDRANT", "false").lower() == "true"
+    qdrant_collection = os.getenv("QDRANT_COLLECTION", "lhcb_papers")
+    
+    vector_store = create_vector_store(
+        use_pinecone=use_pinecone,
+        use_qdrant=use_qdrant,
+        pinecone_index=index_name,
+        qdrant_collection=qdrant_collection,
+        vector_size=1024  # Adjust based on your model's output size
+    )
     
     successful_uploads = 0
     for i in range(0, total_vectors, batch_size):
-        batch = vectors[i:i + batch_size]
+        batch = embedding_data[i:i + batch_size]
         try:
-            index.upsert(vectors=batch)
+            vector_store.upsert(batch)
             successful_uploads += len(batch)
             print(f"Uploaded batch {i//batch_size + 1}/{(total_vectors + batch_size - 1)//batch_size} "
                   f"({successful_uploads}/{total_vectors} vectors)")
@@ -226,9 +239,10 @@ def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_
             continue
     
     if successful_uploads < total_vectors:
-        print(f"Warning: Only uploaded {successful_uploads}/{total_vectors} vectors to Pinecone")
+        print(f"Warning: Only uploaded {successful_uploads}/{total_vectors} vectors")
     else:
-        print(f"Successfully uploaded all {total_vectors} vectors to Pinecone")
+        print(f"Successfully uploaded all {total_vectors} vectors")
+
 
 def main():
     print("Starting script execution")

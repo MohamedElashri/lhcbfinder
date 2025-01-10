@@ -1,15 +1,11 @@
-# app.py
 import flask
 import os
-from pinecone import Pinecone
-import validators
 from flask import render_template, request
 from sentence_transformers import SentenceTransformer
-from helpers import get_matches_initial, fetch_abstract, error, parse_arxiv_identifier
+from helpers import get_matches_initial, fetch_abstract, error, parse_arxiv_identifier, get_vector_store
 from dotenv import load_dotenv
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-# For Flask-Limiter v2, the storage classes are imported directly
 import redis
 from limits.storage import MemoryStorage, RedisStorage
 
@@ -58,12 +54,11 @@ def ratelimit_error(e):
 MODEL_NAME = "BAAI/bge-large-en-v1.5"
 model = SentenceTransformer(MODEL_NAME)
 
-# Pinecone connection (singleton pattern)
-def get_pinecone_index():
-    if not hasattr(app, '_pinecone'):
-        app._pinecone = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-        app._index = app._pinecone.Index(os.environ["PINECONE_INDEX_NAME"])
-    return app._index
+# Vector store connection (singleton pattern)
+def get_store():
+    if not hasattr(app, '_vector_store'):
+        app._vector_store = get_vector_store()
+    return app._vector_store
 
 @app.route("/")
 def home():
@@ -82,17 +77,24 @@ def about():
 def search():
     query = request.args.get("query")
     K = 50  # Maximum total results capped at 50
-    index = get_pinecone_index()
+    store = get_store()
 
     # Check if query is an arXiv identifier
     arxiv_id = parse_arxiv_identifier(query)
     if arxiv_id:
-        matches = index.fetch([arxiv_id])["vectors"]
+        if hasattr(store, 'fetch'):  # Pinecone style
+            matches = store.fetch([arxiv_id])["vectors"]
+        else:  # Qdrant style
+            matches = store.retrieve(
+                collection_name=store.collection_name,
+                ids=[id_hash(arxiv_id)]
+            )
+            
         if len(matches) == 0:
             abstract = fetch_abstract(f"https://arxiv.org/abs/{arxiv_id}")
             embed = model.encode([abstract])[0].tolist()
-            return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
-        return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
+            return get_matches_initial(store, K, vector=embed, exclude=arxiv_id)
+        return get_matches_initial(store, K, id=arxiv_id, exclude=arxiv_id)
 
     # Rest of your validation logic
     if len(query) > 200:
@@ -105,10 +107,10 @@ def search():
         return error("Error creating embedding. Try again in a few minutes.")
 
     try:
-        return get_matches_initial(index, K, vector=embed)  # Use the new function
+        return get_matches_initial(store, K, vector=embed)
     except Exception as e:
-        print(f"Encountered error when fetching matches from Pinecone: {e}", flush=True)
-        return error("Pinecone not responding. Try again in a few minutes.")
+        print(f"Encountered error when fetching matches: {e}", flush=True)
+        return error("Vector store not responding. Try again in a few minutes.")
         
 @app.route("/robots.txt")
 def robots():

@@ -10,3 +10,4 @@ requests
 diskcache
 gunicorn
 validators
+qdrant-client
