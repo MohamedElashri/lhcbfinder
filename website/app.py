@@ -12,6 +12,7 @@ from flask_limiter.util import get_remote_address
 # For Flask-Limiter v2, the storage classes are imported directly
 import redis
 from limits.storage import MemoryStorage, RedisStorage
+from query_processor import QueryProcessor
 
 # Load environment variables from .env file
 load_dotenv()
@@ -54,9 +55,10 @@ def exempt_limits():
 def ratelimit_error(e):
     return {"error": "Too many requests. Try again later."}, 429
 
-# Initialize sentence transformer model
+# Initialize sentence transformer model and query processor
 MODEL_NAME = "BAAI/bge-large-en-v1.5"
 model = SentenceTransformer(MODEL_NAME)
+query_processor = QueryProcessor()
 
 # Pinecone connection (singleton pattern)
 def get_pinecone_index():
@@ -81,6 +83,9 @@ def about():
 @app.route("/search")
 def search():
     query = request.args.get("query")
+    if not query:
+        return error("Query cannot be empty.")
+    
     K = 50  # Maximum total results capped at 50
     index = get_pinecone_index()
 
@@ -94,21 +99,27 @@ def search():
             return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
         return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
 
-    # Rest of your validation logic
-    if len(query) > 200:
-        return error("Sorry! The length of your query cannot exceed 200 characters.")
-
+    # Clean and validate query
+    clean_query = query_processor.clean_query(query)
+    
     try:
-        embed = model.encode([query])[0].tolist()
+        # Create embedding for cleaned query
+        embed = model.encode([clean_query])[0].tolist()
+        
+        # Validate query and embedding
+        is_valid, error_msg = query_processor.validate_query(clean_query, embed)
+        if not is_valid:
+            return error(error_msg)
+        
+        # Get minimum similarity threshold for this query
+        min_threshold = query_processor.get_minimum_similarity_threshold(clean_query)
+        
+        # Get matches with threshold
+        return get_matches_initial(index, K, vector=embed, min_score=min_threshold)
+        
     except Exception as e:
-        print(f"Encountered error when creating embedding: {e}", flush=True)
-        return error("Error creating embedding. Try again in a few minutes.")
-
-    try:
-        return get_matches_initial(index, K, vector=embed)  # Use the new function
-    except Exception as e:
-        print(f"Encountered error when fetching matches from Pinecone: {e}", flush=True)
-        return error("Pinecone not responding. Try again in a few minutes.")
+        print(f"Search error: {e}", flush=True)
+        return error("An error occurred while processing your query. Please try again.")
         
 @app.route("/robots.txt")
 def robots():

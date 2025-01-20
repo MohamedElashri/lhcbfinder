@@ -39,7 +39,7 @@ def avg_score(papers):
     avg_score = sum([p.score for p in papers]) / len(papers)
     return round(avg_score, 2)
 
-def get_matches_initial(index, k, vector=None, id=None, exclude=None):
+def get_matches_initial(index, k, vector=None, id=None, exclude=None, min_score=0.0):
     assert vector is not None or id is not None
 
     if vector is not None:
@@ -48,7 +48,12 @@ def get_matches_initial(index, k, vector=None, id=None, exclude=None):
         top_k = index.query(id=id, top_k=k, include_metadata=True)
 
     matches = top_k["matches"]
-    papers = [Paper(match) for match in matches if match["id"] != exclude]
+    
+    # Filter matches by minimum similarity score
+    matches = [match for match in matches if match["score"] >= min_score and match["id"] != exclude]
+    
+    # Convert to Paper objects and limit results
+    papers = [Paper(match) for match in matches]
     total_results = min(len(papers), 50)
     papers = papers[:total_results]
 
@@ -84,9 +89,6 @@ def get_authors(papers):
 def error(msg):
     return json.dumps({"error": msg})
 
-def error(msg):
-    return json.dumps({"error": msg})
-
 def parse_arxiv_identifier(query):
     """Parse different forms of arXiv identifiers."""
     # Remove any whitespace
@@ -106,4 +108,3 @@ def parse_arxiv_identifier(query):
             pass
     
     return None
-
