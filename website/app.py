@@ -120,5 +120,9 @@ def robots():
 def health():
     return {"status": "healthy"}, 200
 
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8000)

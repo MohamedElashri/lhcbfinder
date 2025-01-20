@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- Basic Meta Tags -->
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        
+        <!-- Primary Meta Tags -->
+        <title>Privacy Policy | LHCb Papers Search</title>
+        <meta name="title" content="Privacy Policy | LHCb Papers Search">
+        <meta name="description" content="Privacy policy for LHCb Papers Search - Learn about how we handle and protect your data.">
+        <meta name="author" content="Mohamed Elashri">
+        <meta name="language" content="English">
+        <meta name="robots" content="index, follow">
+    
+        <!-- Open Graph / Facebook -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://lhcbfinder.net/privacy">
+        <meta property="og:title" content="Privacy Policy | LHCb Papers Search">
+        <meta property="og:description" content="Privacy policy for LHCb Papers Search - Learn about how we handle and protect your data.">
+        <meta property="og:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Twitter -->
+        <meta property="twitter:card" content="summary_large_image">
+        <meta property="twitter:url" content="https://lhcbfinder.net/privacy">
+        <meta property="twitter:title" content="Privacy Policy | LHCb Papers Search">
+        <meta property="twitter:description" content="Privacy policy for LHCb Papers Search - Learn about how we handle and protect your data.">
+        <meta property="twitter:image" content="https://lhcbfinder.net/static/favicon.png">
+    
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://lhcbfinder.net/privacy">
+    
+        <!-- Favicon -->
+        <link rel="icon" type="image/x-icon" href="static/favicon.png">
+    
+        <!-- Stylesheets -->
+        <link rel="stylesheet" type="text/css" href="static/styles.css">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    
+        <script>
+            // Apply theme immediately to prevent flash of wrong theme
+            (function() {
+                const savedTheme = localStorage.getItem('theme') || 
+                                 (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            })();
+        </script>
+    
+        <!-- Scripts -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js" crossorigin="anonymous"></script>
+        <script src="/static/script.js"></script>
+    </head>
+    <body>
+        <div id="header">
+            <a id="logo" href="/">
+                <span style="color: var(--cern-blue)">LHCb</span>
+                <span style="color: var(--cern-red)">Papers</span>
+                <span style="color: var(--text-color)">Search</span>
+            </a>
+            <div id="right_header">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <span class="theme-toggle-text">🌙</span>
+                </button>
+                <a class="header_link" href="about">about</a>
+            </div>
+        </div>
+        <div id="container">
+            <h1 id="about_title">Privacy Policy</h1>
+            
+            <div class="about-content">
+                <section class="about-section">
+                    <h2>Introduction</h2>
+                    <p class="about_text">At LHCb Papers Search, we are committed to protecting your privacy while providing you with a valuable research tool. This privacy policy explains how we handle information when you use our service.</p>
+                </section>
+
+                <section class="about-section">
+                    <h2>Information We Collect</h2>
+                    <p class="about_text">We collect and process minimal information necessary to maintain the security and performance of our service:</p>
+                    <ul class="about_text">
+                        <li><strong>IP Address:</strong> We temporarily store IP addresses for security purposes and to prevent abuse of our services.</li>
+                        <li><strong>Access Timestamps:</strong> We record when our service is accessed to monitor and prevent potential misuse.</li>
+                        <li><strong>User Agent Information:</strong> We collect browser/client information to prevent automated scraping and ensure optimal service performance.</li>
+                    </ul>
+                </section>
+
+                <section class="about-section">
+                    <h2>How We Use This Information</h2>
+                    <p class="about_text">The collected information is used exclusively for:</p>
+                    <ul class="about_text">
+                        <li>Preventing abuse and maintaining service security</li>
+                        <li>Protecting against automated scraping and bot activities</li>
+                        <li>Ensuring continuous service availability</li>
+                        <li>Improving service performance and reliability</li>
+                    </ul>
+                </section>
+
+                <section class="about-section">
+                    <h2>Data Retention</h2>
+                    <p class="about_text">We retain the collected data only for as long as necessary to fulfill the purposes outlined in this privacy policy. Access logs are regularly rotated and old data is automatically purged.</p>
+                </section>
+
+                <section class="about-section">
+                    <h2>No Personal Data Collection</h2>
+                    <p class="about_text">We do not collect, store, or process any personal information beyond the technical data mentioned above. We do not use cookies, tracking pixels, or any other user tracking technologies.</p>
+                </section>
+
+                <section class="about-section">
+                    <h2>Contact</h2>
+                    <p class="about_text">If you have any questions about this privacy policy or our practices, please contact us through the information provided on our <a href="/about">About page</a>.</p>
+                </section>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <a href="https://lhcb.web.cern.ch/" target="_blank">LHCb</a>
+            <span>|</span>
+            <a href="https://github.com/MohamedElashri/lhcbfinder" target="_blank">GitHub</a>
+            <span>|</span>
+            <a href="/privacy">Privacy</a>
+        </footer>
+    </body>
+</html>
