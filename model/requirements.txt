@@ -5,6 +5,6 @@ PyPDF2
 requests
 numpy
 sentence-transformers
-pinecone-client
+pinecone
 kaggle
 python-dotenv

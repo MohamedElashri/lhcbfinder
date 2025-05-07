@@ -42,21 +42,95 @@ def avg_score(papers):
 def get_matches_initial(index, k, vector=None, id=None, exclude=None, min_score=0.0):
     assert vector is not None or id is not None
 
-    if vector is not None:
-        top_k = index.query(vector=vector, top_k=k, include_metadata=True)
-    else:
-        top_k = index.query(id=id, top_k=k, include_metadata=True)
-
-    matches = top_k["matches"]
+    # Ensure we return exactly k unique papers (not chunks)
+    max_papers = k  # Target number of unique papers
+    unique_papers = {}
     
-    # Filter matches by minimum similarity score
-    matches = [match for match in matches if match["score"] >= min_score and match["id"] != exclude]
+    # Start with a reasonable batch size to avoid too many API calls
+    initial_fetch = max(max_papers * 3, 50)  # Start with 3x or at least 50
+    max_fetch = 1000  # Maximum to fetch in a single query
     
-    # Convert to Paper objects and limit results
-    papers = [Paper(match) for match in matches]
-    total_results = min(len(papers), 50)
-    papers = papers[:total_results]
-
+    # Parameters for pagination if needed
+    fetch_size = initial_fetch
+    last_score = None
+    paper_ids_seen = set()  # Track paper IDs we've already seen
+    
+    # Keep fetching until we have enough unique papers or no more results
+    while len(unique_papers) < max_papers:
+        # Prepare query parameters
+        if last_score is not None:
+            # For pagination: filter scores less than the last one we've seen
+            filter = {"score": {"$lt": last_score}}
+        else:
+            filter = None
+            
+        # Execute query
+        if vector is not None:
+            results = index.query(vector=vector, top_k=fetch_size, include_metadata=True, filter=filter)
+        else:
+            results = index.query(id=id, top_k=fetch_size, include_metadata=True, filter=filter)
+            
+        matches = results["matches"]
+        
+        # Break if no more results
+        if not matches:
+            break
+            
+        # Update last score for pagination
+        last_score = matches[-1]["score"]
+        
+        # Filter by minimum score and excluded ID
+        matches = [match for match in matches if match["score"] >= min_score and match["id"] != exclude]
+        
+        # Process matches and deduplicate
+        for match in matches:
+            # Extract real paper ID (removing chunk suffix if present)
+            paper_id = match["id"]
+            if "_chunk_" in paper_id:
+                parent_id = paper_id.split("_chunk_")[0]
+            else:
+                parent_id = paper_id
+                
+            # Skip if we've already seen this paper
+            if parent_id in paper_ids_seen:
+                continue
+                
+            paper_ids_seen.add(parent_id)
+            
+            # Keep the highest scoring match for each paper
+            if parent_id not in unique_papers or match["score"] > unique_papers[parent_id]["score"]:
+                # Store highest scoring match for this paper
+                unique_papers[parent_id] = match
+                
+                # If this is a chunk, make sure metadata is properly set
+                if "_chunk_" in paper_id:
+                    if "parent_id" not in match["metadata"]:
+                        match["metadata"]["parent_id"] = parent_id
+                    if "is_chunk" not in match["metadata"]:
+                        match["metadata"]["is_chunk"] = True
+                        
+            # Break early if we have enough unique papers
+            if len(unique_papers) >= max_papers:
+                break
+                
+        # If we didn't get enough papers but processed all available matches,
+        # increase fetch size for next iteration (up to max_fetch)
+        if len(unique_papers) < max_papers and len(matches) < fetch_size:
+            # We've exhausted results at this fetch size
+            if fetch_size >= max_fetch:
+                # We've hit our maximum fetch limit, so no point in continuing
+                break
+            else:
+                # Double the fetch size for next iteration
+                fetch_size = min(fetch_size * 2, max_fetch)
+    
+    # Sort papers by score (highest first)
+    sorted_papers = sorted(unique_papers.values(), key=lambda p: p["score"], reverse=True)
+    
+    # Convert to Paper objects
+    papers = [Paper(match) for match in sorted_papers[:max_papers]]
+    total_results = len(papers)
+    
     # Convert papers to dict for JSON serialization
     papers_dict = [paper.__dict__ for paper in papers]
 

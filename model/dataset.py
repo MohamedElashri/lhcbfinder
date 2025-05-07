@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from collections import deque
 import math
 import gzip
+import random
+import re
 
 class AdaptiveRateLimiter:
     def __init__(self, initial_delay=5, window_size=10, max_delay=300):
@@ -61,9 +63,23 @@ class ArxivDownloader:
         })
         self.error_counts = {}
         self.removed_papers = []  # Track removed/404 papers
+        
+        # Ensure the removed_papers.json file exists
+        if os.path.exists('removed_papers.json'):
+            try:
+                with open('removed_papers.json', 'r') as f:
+                    self.removed_papers = json.load(f)
+                logging.info(f"Loaded {len(self.removed_papers)} known removed paper IDs from file")
+            except json.JSONDecodeError:
+                logging.warning("Error loading removed_papers.json, starting with empty list")
 
     def download_pdf(self, paper_id, output_dir):
-        """Download a single PDF with adaptive rate limiting."""
+        """Download a single PDF with adaptive rate limiting and improved error handling."""
+        # Check if paper is in known removed list
+        if paper_id in self.removed_papers:
+            logging.info(f"Skipping {paper_id} - known to be removed/retracted")
+            return True
+            
         # Replace slashes with underscores in the filename to avoid folder creation
         safe_paper_id = paper_id.replace('/', '_')
         pdf_path = Path(output_dir) / f"{safe_paper_id}.pdf"
@@ -73,15 +89,79 @@ class ArxivDownloader:
             logging.info(f"Skipping {paper_id} - already downloaded")
             return True
 
-        url = f"https://arxiv.org/pdf/{paper_id}.pdf"
+        # Normalize the paper ID format
+        # Modern arXiv IDs look like 2010.12345, older ones like 0704.0001
+        if not re.match(r'^\d{4}\.\d{4,5}(v\d+)?$', paper_id):
+            try:
+                # Try to normalize legacy arXiv ID format (with categories like hep-ex/0101001)
+                if '/' in paper_id:
+                    # Already has category prefix, keep as is
+                    normalized_id = paper_id
+                else:
+                    # See if it's a 7-digit number that needs formatting as YYMM.NNNN
+                    match = re.match(r'^(\d{7})$', paper_id)
+                    if match:
+                        yymm = paper_id[:4]
+                        number = paper_id[4:]
+                        normalized_id = f"{yymm}.{number}"
+                    else:
+                        normalized_id = paper_id
+            except Exception as e:
+                logging.error(f"Error normalizing paper ID {paper_id}: {str(e)}")
+                normalized_id = paper_id
+        else:
+            normalized_id = paper_id
+            
+        logging.info(f"Normalized ID: {paper_id} -> {normalized_id}")
+        
+        url = f"https://arxiv.org/pdf/{normalized_id}.pdf"
         max_retries = 5
+        
+        # Try alternative URLs if initial attempts fail
+        urls_to_try = [
+            f"https://arxiv.org/pdf/{normalized_id}.pdf",
+            f"https://arxiv.org/pdf/{normalized_id}",  # Without .pdf extension
+            f"https://arxiv.org/ftp/arxiv/papers/{normalized_id[:4]}/{normalized_id}.pdf"  # Direct FTP path
+        ]
+        
+        # Add alternative format URLs for legacy paper IDs
+        if '/' in normalized_id:
+            # For papers like math/0409046, also try https://arxiv.org/pdf/math/0409046
+            category, num = normalized_id.split('/')
+            urls_to_try.extend([
+                f"https://arxiv.org/pdf/{category}/{num}.pdf",
+                f"https://arxiv.org/pdf/{category}/{num}",
+                f"https://arxiv.org/ftp/arxiv/papers/{category}/{num}.pdf"
+            ])
         
         for attempt in range(max_retries):
             # Wait according to rate limiter
             self.rate_limiter.wait()
             
+            # Try different URL formats
+            current_url = urls_to_try[min(attempt, len(urls_to_try)-1)]
+            logging.info(f"Attempt {attempt+1}/{max_retries} for {paper_id} using URL: {current_url}")
+            
             try:
-                response = self.session.get(url, stream=True, timeout=30)
+                # Add different user agents on retries
+                if attempt > 0:
+                    user_agents = [
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+                        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
+                    ]
+                    self.session.headers.update({
+                        'User-Agent': user_agents[attempt % len(user_agents)]
+                    })
+                
+                # Add random delay on retries
+                if attempt > 0:
+                    jitter = (0.5 + random.random()) * self.rate_limiter.current_delay
+                    time.sleep(jitter)
+                
+                # Make the request with increased timeout on retries
+                timeout = 30 + (attempt * 15)  # Increase timeout with each retry
+                response = self.session.get(current_url, stream=True, timeout=timeout)
                 
                 # Handle 404 errors (removed/retracted papers)
                 if response.status_code == 404:
@@ -103,20 +183,27 @@ class ArxivDownloader:
                 
                 response.raise_for_status()
                 
+                # Check content type - must be PDF
+                content_type = response.headers.get('Content-Type', '')
+                if 'pdf' not in content_type.lower() and 'octet-stream' not in content_type.lower():
+                    if attempt < max_retries - 1:
+                        logging.warning(f"Unexpected content type for {paper_id}: {content_type}. Retrying...")
+                        continue
+                
                 # Save the PDF
                 with open(pdf_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
                 
-                # Verify download
-                if pdf_path.stat().st_size > 0:
+                # Verify download - needs to be larger than a minimal PDF
+                if pdf_path.stat().st_size > 1000:  # Likely valid PDF if > 1KB
                     self.rate_limiter.update(True)
-                    logging.info(f"Successfully downloaded {paper_id}")
+                    logging.info(f"Successfully downloaded {paper_id} ({pdf_path.stat().st_size/1024:.1f} KB)")
                     return True
                 else:
                     self.rate_limiter.update(False)
-                    logging.error(f"Downloaded file is empty for {paper_id}")
+                    logging.error(f"Downloaded file for {paper_id} is too small ({pdf_path.stat().st_size} bytes)")
                     pdf_path.unlink()
                     return False
             
@@ -131,7 +218,7 @@ class ArxivDownloader:
                     return True  # Consider it "successful" to avoid retries
                 
                 self.rate_limiter.update(False)
-                logging.error(f"Attempt {attempt + 1} failed for {paper_id}: {str(e)}")
+                logging.error(f"Request failed for {paper_id} (attempt {attempt + 1}): {str(e)}")
                 if pdf_path.exists():
                     pdf_path.unlink()
                 

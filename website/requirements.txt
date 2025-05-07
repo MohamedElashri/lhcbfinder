@@ -1,5 +1,5 @@
 flask
-pinecone-client
+pinecone
 sentence-transformers
 python-dotenv
 flask-limiter
