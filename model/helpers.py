@@ -6,51 +6,88 @@ from paper import Paper
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from pathlib import Path
+import gzip
 
 def count_lines(file_path):
     """Count total lines in a file for progress bar."""
     with open(file_path, "r", encoding="utf-8") as f:
         return sum(1 for _ in f)
 
-def load_data(file_path, pdf_dir=None, include_pdf=False, start_year=None):
+def load_data(json_file_path, pdf_dir=None, include_pdf=False, start_year=None):
     """
-    Returns a generator over the papers contained in `file_path`.
-    Args:
-        file_path: Path to the arXiv metadata JSON file
-        pdf_dir: Optional directory containing PDF files
-        include_pdf: Whether to include PDF content in embeddings
-        start_year: If set, only yield papers from that year onward
-    """
-    total_lines = count_lines(file_path)
-    papers = []
-    skipped = 0
+    Load arXiv papers from JSON file and filter them.
     
-    print("Loading papers from JSON file...")
-    with open(file_path, "r", encoding="utf-8") as json_file:
-        for line in tqdm(json_file, total=total_lines, desc="Loading papers"):
+    Args:
+        json_file_path: Path to JSON file containing arXiv papers
+        pdf_dir: Optional directory path containing PDF files
+        include_pdf: Whether to include PDF content in embeddings
+        start_year: Only include papers published after this year
+        
+    Yields:
+        Paper objects
+    """
+    # Check if JSON file exists
+    if not Path(json_file_path).exists():
+        raise FileNotFoundError(f"JSON file not found at {json_file_path}")
+    
+    # First pass: filter for LHCb papers only (faster than loading all papers)
+    print("First pass: filtering for LHCb papers only...")
+    lhcb_ids = set()
+    with gzip.open(json_file_path, 'rt', encoding='utf-8') if json_file_path.endswith('.gz') else open(json_file_path, 'r', encoding='utf-8') as f:
+        for i, line in enumerate(tqdm(f, desc="Scanning papers", unit="papers")):
             try:
                 data_dict = json.loads(line)
-                paper = Paper(data_dict, pdf_dir=pdf_dir, include_pdf=include_pdf)
                 
-                if not paper.has_valid_id:
-                    skipped += 1
-                    continue
-                    
-                if start_year and paper.year < start_year:
-                    skipped += 1
-                    continue
-                    
-                papers.append(paper)
+                # Check if paper is related to LHCb
+                title = data_dict.get("title", "").lower()
+                abstract = data_dict.get("abstract", "").lower()
+                paper_id = data_dict.get("id", "")
                 
-            except json.JSONDecodeError as e:
-                print(f"Error parsing JSON line: {str(e)}")
+                # Quick filtering for LHCb papers
+                if "lhcb" in title or "lhcb" in abstract:
+                    # Apply year filter if specified
+                    if start_year and 'update_date' in data_dict:
+                        year = int(data_dict['update_date'].split('-')[0])
+                        if year < int(start_year):
+                            continue
+                    
+                    lhcb_ids.add(paper_id)
+            except json.JSONDecodeError:
+                continue
+            except KeyError:
                 continue
             except Exception as e:
-                print(f"Error processing paper: {str(e)}")
+                print(f"Error processing line {i}: {str(e)}")
                 continue
-
-    print(f"\nLoaded {len(papers)} papers, skipped {skipped} papers")
-    return papers
+    
+    print(f"Found {len(lhcb_ids)} LHCb-related papers")
+    
+    # Second pass: load only the filtered LHCb papers
+    print("Second pass: loading the filtered LHCb papers...")
+    with gzip.open(json_file_path, 'rt', encoding='utf-8') if json_file_path.endswith('.gz') else open(json_file_path, 'r', encoding='utf-8') as f:
+        for i, line in enumerate(tqdm(f, desc="Loading papers", unit="papers")):
+            try:
+                data_dict = json.loads(line)
+                paper_id = data_dict.get("id", "")
+                
+                # Only process papers in our filtered set
+                if paper_id in lhcb_ids:
+                    # Apply year filter (redundant check, but kept for safety)
+                    if start_year and 'update_date' in data_dict:
+                        year = int(data_dict['update_date'].split('-')[0])
+                        if year < int(start_year):
+                            continue
+                    
+                    paper = Paper(data_dict, pdf_dir=pdf_dir, include_pdf=include_pdf)
+                    yield paper
+            except json.JSONDecodeError:
+                continue
+            except KeyError:
+                continue
+            except Exception as e:
+                print(f"Error processing line {i}: {str(e)}")
+                continue
 
 def filter_lhcb_papers(papers):
     """
