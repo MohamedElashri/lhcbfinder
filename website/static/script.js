@@ -206,6 +206,9 @@ function performSearch() {
     field.readOnly = true;
     $(field).blur();
 
+    // Always reset to page 1 for new searches
+    currentPage = 1;
+
     $("#loading_container").show();
     $("#results").hide();
 
@@ -373,6 +376,39 @@ function addPaper(result) {
     let dotClass = result.score >= 0.80 ? "dot_green" : "dot_orange";
     const formattedAuthors = formatAuthors(result.authors);
     
+    // Generate PDF content section if available
+    let pdfContentSection = '';
+    if (result.has_pdf_content && result.pdf_preview) {
+        pdfContentSection = `
+        <div class="pdf_content_container">
+            <div class="pdf_content_header" onclick="togglePdfContent(event, '${result.id}')">
+                <div class="pdf_icon">📄</div>
+                <p class="pdf_header_text">PDF Content Available</p>
+                <div class="pdf_toggle">▼</div>
+            </div>
+            <div id="pdf_preview_${result.id}" class="pdf_preview">
+                <p class="pdf_preview_text">${result.pdf_preview}</p>
+                <div class="pdf_full_toggle" onclick="loadFullPdfContent(event, '${result.id}')">Show Full Content</div>
+            </div>
+            <div id="pdf_full_${result.id}" class="pdf_full_content hidden">
+                <p class="pdf_full_text">${result.pdf_content || ''}</p>
+            </div>
+        </div>`;
+    }
+    
+    // Add chunk navigation if chunks are available
+    let chunkNavigation = '';
+    if (result.total_chunks > 1) {
+        chunkNavigation = `
+        <div class="chunk_navigation">
+            <p class="chunk_info">Showing chunk ${result.chunk_index + 1} of ${result.total_chunks}</p>
+            <div class="chunk_nav_buttons">
+                ${result.chunk_index > 0 ? `<button class="chunk_nav_btn" onclick="navigateChunk(event, '${result.id}', ${result.chunk_index - 1})">Previous</button>` : ''}
+                ${result.chunk_index < result.total_chunks - 1 ? `<button class="chunk_nav_btn" onclick="navigateChunk(event, '${result.id}', ${result.chunk_index + 1})">Next</button>` : ''}
+            </div>
+        </div>`;
+    }
+    
     return `<div class="search_result result_clickable" onclick="resultClicked(this)">
         <div class="result_top">
             <div class="result_year black"><p>${result.month} ${result.year}</p></div>
@@ -386,6 +422,8 @@ function addPaper(result) {
         </p>
         <p class="result_authors">${formattedAuthors}</p>
         <p class="result_abstract truncated_text black">${result.abstract}</p>
+        ${pdfContentSection}
+        ${chunkNavigation}
         <div class="result_button_container">
             <div class="result_button_flex">
                 <a href="https://arxiv.org/abs/${result.id}" target="_blank">
@@ -467,6 +505,59 @@ function adjustTextareaHeight(textarea) {
 
 // Add viewport height fix for mobile browsers
 function setViewportHeight() {
-    const vh = window.innerHeight * 0.01;
+    let vh = window.innerHeight * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
+// Toggle the visibility of PDF content preview
+function togglePdfContent(event, paperId) {
+    event.stopPropagation(); // Prevent result card click event
+    
+    const previewElement = document.getElementById(`pdf_preview_${paperId}`);
+    const toggleIcon = event.currentTarget.querySelector('.pdf_toggle');
+    
+    if (previewElement.classList.contains('hidden')) {
+        previewElement.classList.remove('hidden');
+        toggleIcon.textContent = '▼'; // Down arrow
+    } else {
+        previewElement.classList.add('hidden');
+        toggleIcon.textContent = '►'; // Right arrow
+        
+        // Also hide full content if it's visible
+        const fullContentElement = document.getElementById(`pdf_full_${paperId}`);
+        if (fullContentElement && !fullContentElement.classList.contains('hidden')) {
+            fullContentElement.classList.add('hidden');
+        }
+    }
+}
+
+// Load and display the full PDF content
+function loadFullPdfContent(event, paperId) {
+    event.stopPropagation(); // Prevent result card click event
+    
+    const previewElement = document.getElementById(`pdf_preview_${paperId}`);
+    const fullContentElement = document.getElementById(`pdf_full_${paperId}`);
+    
+    // Toggle visibility of full content
+    if (fullContentElement.classList.contains('hidden')) {
+        fullContentElement.classList.remove('hidden');
+        previewElement.classList.add('hidden');
+        event.target.textContent = 'Show Preview';
+    } else {
+        fullContentElement.classList.add('hidden');
+        previewElement.classList.remove('hidden');
+        event.target.textContent = 'Show Full Content';
+    }
+}
+
+// Navigate between chunks of a paper
+function navigateChunk(event, paperId, chunkIndex) {
+    event.stopPropagation(); // Prevent result card click event
+    
+    // This would typically make an API call to fetch the specific chunk
+    // For now, we'll just show an alert as a placeholder
+    alert(`Navigating to chunk ${chunkIndex + 1} for paper ${paperId}. This feature requires server-side implementation.`);
+    
+    // In a real implementation, you would make an AJAX call to fetch the chunk data
+    // and then update the paper display with the new chunk content
 }

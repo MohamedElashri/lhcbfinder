@@ -725,17 +725,144 @@ p, a {
     border: 1px solid var(--code-border);
 }
 
+.pdf-content {
+    position: relative;
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 30px;
+    margin-bottom: 20px;
+    transition: all 0.15s ease;
+}
+
+.pdf-content:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-content .pdf-page {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.pdf-content .pdf-page iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.pdf_content_container {
+    margin-top: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.pdf_content_header {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: var(--toggle-background);
+    cursor: pointer;
+}
+
+.pdf_content_header:hover {
+    background-color: var(--toggle-hover);
+}
+
+.pdf_icon {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+.pdf_header_text {
+    flex-grow: 1;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.pdf_toggle {
+    font-size: 14px;
+    color: var(--text-color-secondary);
+}
+
+.pdf_preview, .pdf_full_content {
+    padding: 15px;
+    background-color: var(--background-color);
+    border-top: 1px solid var(--border-color);
+}
+
+.pdf_preview_text, .pdf_full_text {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-color);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.pdf_full_text {
+    max-height: 500px;
+}
+
+.pdf_full_toggle {
+    margin-top: 10px;
+    padding: 5px 10px;
+    background-color: var(--toggle-background);
+    border-radius: 4px;
+    display: inline-block;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-color);
+}
+
+.pdf_full_toggle:hover {
+    background-color: var(--toggle-hover);
+}
+
+.chunk_navigation {
+    margin-top: 15px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--toggle-background);
+}
+
+.chunk_info {
+    font-size: 13px;
+    color: var(--text-color);
+    margin-bottom: 8px;
+}
+
+.chunk_nav_buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.chunk_nav_btn {
+    padding: 5px 10px;
+    background-color: var(--toggle-enabled-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.chunk_nav_btn:hover {
+    opacity: 0.9;
+}
+
+.hidden {
+    display: none;
+}
+
 .footer {
     text-align: center;
     padding: 1.5rem;
-    position: fixed;
-    bottom: 0;
-    width: 100%;
-    background-color: var(--background-color);
+    margin-top: 2rem;
     border-top: 1px solid var(--border-color);
-    font-family: 'Open Sans', sans-serif;
-    transition: background-color var(--transition-duration) ease, 
-                border-color var(--transition-duration) ease;
+    color: var(--text-color-secondary);
 }
 
 .footer a {
