@@ -19,6 +19,7 @@ RUN apt-get update \
 COPY app.py .
 COPY helpers.py .
 COPY paper.py .
+COPY query_processor.py .
 COPY static static/
 COPY templates templates/
 COPY requirements.txt .
