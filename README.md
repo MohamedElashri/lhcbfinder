@@ -6,15 +6,11 @@ There is a web interface to search for papers in easy and straightforward way. I
 
 This is currently more of a proof of concept and I plan to improve the search results and the interface in the future. I'm going to present the results of this projects in a more technical manner later. 
 
-a demo of the project is available on my website hosted on a humble server [here](https://lhcbfinder.net/)
-
-![LHCb Finder Demo](img/lhcbfinder.gif)
-
-
+a demo of the project is available and hosted on a humble server [here](https://lhcbfinder.net/)
 
 There are two main parts of this project:
 
-## pipeline
+## model
 
 The code inside the `model` folder is responsible for creating the embeddings for the papers. It scrapes the arxiv papers dataset on kaggle and uses sentence transformers to encode the papers. The embeddings are saved in a file and used in the search part. I also use `Pinecode` to create the embeddings for the papers.
 
@@ -30,7 +26,7 @@ The code inside the `website` folder is responsible for the web interface. It us
 The website component can be run either locally using Python or via Docker. Both methods are explained below.
 
 #### Prerequisites
-- Python 3.10 or higher
+- Python `3.10` or higher
 - Pinecone API key and index name
 
 ### Local Development Setup
