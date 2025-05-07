@@ -503,7 +503,6 @@ class Paper:
         """Text used for embedding, combining metadata with cleaned PDF content if available."""
         text = [
             f"Title: {self.title}",
-            f"Authors: {self.authors_string}",
             f"Year: {self.year}",
             f"Month: {self.month}",
             f"Abstract: {self.abstract}"
@@ -513,7 +512,6 @@ class Paper:
             text.append(f"Content: {self._cleaned_pdf_content}")
             
         return " ".join(text)
-
     @property
     def metadata(self):
         """Metadata dict that you can store in a DB or Pinecone."""
