@@ -542,14 +542,41 @@ def get_papers_needing_embeddings(papers: List, index_name: str, kaggle_file: st
     return papers_to_process, is_new_index
 
 
-def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_name: str, kaggle_file: str, batch_size: int = 50):
-    """Store embeddings both in Pinecone and locally for Kaggle."""
+def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_name: str, kaggle_file: str, batch_size: int = 50, test_mode: bool = False):
+    """Store embeddings both in Pinecone and locally for Kaggle.
+    
+    Args:
+        embedding_data: List of tuples (id, embedding_vector, metadata)
+        index_name: Name of Pinecone index
+        kaggle_file: Path to local file for storing embeddings
+        batch_size: Batch size for Pinecone uploads
+        test_mode: If True, embeddings are not stored to avoid overwriting production data
+    """
     if not embedding_data:
         print("No new embeddings to store.")
         return
         
     print("Entering store_embeddings function")
     total_vectors = len(embedding_data)
+    
+    if test_mode:
+        print(f"{Fore.MAGENTA} TEST MODE: Saving embeddings to test file instead of production data")
+        test_file = "embeddings_test.json"
+        print(f"{Fore.MAGENTA} Saving {total_vectors} embeddings to {test_file}")
+        try:
+            with open(test_file, 'w', encoding='utf-8') as f:  # Using 'w' to overwrite previous test data
+                for id_, embedding, metadata in embedding_data:
+                    paper_dict = {
+                        "id": id_,
+                        "embedding": embedding,
+                        **metadata
+                    }
+                    f.write(json.dumps(paper_dict) + '\n')
+            print(f"{Fore.GREEN} Successfully saved {total_vectors} embeddings to test file")
+        except Exception as e:
+            print(f"{Fore.RED} Error saving embeddings to test file: {str(e)}")
+        print(f"{Fore.MAGENTA} Skipping upload to Pinecone in test mode")
+        return
     
     # First: Store locally for Kaggle
     print("Saving embeddings locally...")
@@ -1027,7 +1054,7 @@ def main():
         print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
         
         storage_start = time.time()
-        store_embeddings(embedding_data, os.environ["PINECONE_INDEX_NAME"], "lhcb-arxiv-embeddings.json", batch_size=50)
+        store_embeddings(embedding_data, os.environ["PINECONE_INDEX_NAME"], "lhcb-arxiv-embeddings.json", batch_size=50, test_mode=args.test_mode)
         storage_time = time.time() - storage_start
         
         print(f"{Fore.GREEN} Embeddings stored successfully in {Fore.YELLOW}{storage_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{storage_time/60:.1f} minutes)")

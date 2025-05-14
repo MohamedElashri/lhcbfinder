@@ -177,6 +177,7 @@ To completely refresh all data:
 ./run.sh --force-arxiv-download --force-embeddings --force-pdf-download --include-pdf --download-pdfs
 ```
 
+
 ## All Available Options
 
 ```bash
@@ -194,3 +195,12 @@ To completely refresh all data:
 - `arxiv-metadata-oai-snapshot.json`: arXiv metadata
 - `lhcb-arxiv-embeddings.json`: Generated embeddings
 - `lhcb_pdfs/`: Directory containing downloaded PDFs
+
+## Production Deployment
+
+### lhcbfinder.net Production Setup
+To generate the complete production-ready version as deployed on lhcbfinder.net, use:
+```bash
+./run.sh --force-arxiv-download --force-embeddings --force-pdf-download --include-pdf --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
+```
+Note: This command assumes a clean slate and will rebuild the entire dataset and embeddings from scratch. It requires significant processing time and disk space.
