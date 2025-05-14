@@ -1,5 +1,7 @@
 # LHCb Papers Embedding Pipeline
 
+This pipeline creates vector embeddings for LHCb papers from the arXiv dataset, with optional PDF content inclusion for improved search results.
+
 ## Prerequisites
 
 1. Environment Setup
@@ -17,6 +19,9 @@ KAGGLE_KEY=your_kaggle_api_key
 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
+
+# For enhanced progress visualization (optional but recommended)
+pip install colorama psutil yaspin
 ```
 
 ## Basic Usage
@@ -39,6 +44,33 @@ To download and include PDF content in embeddings:
 Process papers from a specific year onwards:
 ```bash
 ./run.sh --start-year 2020
+```
+
+## Content Chunking Options
+
+For more precise searching, you can enable content chunking which creates separate embeddings for sections of papers.
+
+### Basic Chunking
+Enable chunking with default settings (500 words per chunk, 100 words overlap):
+```bash
+./run.sh --include-pdf --download-pdfs --chunk-mode
+```
+
+### Custom Chunk Size
+Control chunk size and overlap for fine-tuning:
+```bash
+./run.sh --include-pdf --download-pdfs --chunk-mode --chunk-size 300 --chunk-overlap 50
+```
+
+## Test Mode
+
+You can run in test mode with a limited number of papers to verify your setup quickly:
+```bash
+# Test with 10 papers (default)
+./run.sh --test-mode
+
+# Test with custom paper count
+./run.sh --test-mode --limit 20 --include-pdf --download-pdfs
 ```
 
 ## Force Flags
@@ -73,6 +105,13 @@ You can combine any of the force flags:
 ./run.sh --force-embeddings --include-pdf --download-pdfs --start-year 2020
 ```
 
+
+### Skip Confirmation
+To run without confirmation prompts (useful for automated scripts):
+```bash
+./run.sh --include-pdf --download-pdfs --no-confirmation
+```
+
 ## Common Scenarios
 
 ### First Time Setup
@@ -91,6 +130,12 @@ To process only new papers:
 ./run.sh --include-pdf --download-pdfs
 ```
 
+### Creating Chunked Embeddings
+For more fine-grained search with content chunks:
+```bash
+./run.sh --include-pdf --download-pdfs --chunk-mode --chunk-size 400 --chunk-overlap 80
+```
+
 ### Moving to New Pinecone Index
 When switching to a new Pinecone index:
 1. Update PINECONE_INDEX_NAME in .env
@@ -98,6 +143,33 @@ When switching to a new Pinecone index:
 ```bash
 ./run.sh --force-embeddings --include-pdf --download-pdfs
 ```
+
+### Quick Testing
+For testing your setup without processing the entire dataset:
+```bash
+./run.sh --test-mode --limit 5 --include-pdf --download-pdfs
+```
+
+## Embedding Format and Metadata
+
+### Embedding Content Structure
+The embedding text focuses on the most semantically relevant content:
+- **Title**: The paper title
+- **Year**: Publication year
+- **Abstract**: Paper abstract
+- **Content**: PDF content (when using --include-pdf) or content chunks (when using --chunk-mode)
+
+### Metadata Fields
+Each embedding includes these metadata fields:
+- id: The paper ID
+- title: Paper title
+- authors: Authors list (preserved in metadata)
+- year: Publication year
+- abstract: Paper abstract
+- categories: arXiv categories
+- is_chunk: Whether this is a content chunk (when using --chunk-mode)
+- chunk_id: The chunk identifier (when applicable)
+- parent_id: ID of the parent paper (for chunks)
 
 ### Refreshing All Data
 To completely refresh all data:

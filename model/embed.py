@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any
 import numpy as np
 from tqdm import tqdm
+from colorama import Fore, Back, Style, init
+from datetime import datetime
 from paper import Paper, PDFCleaner
+
+# Initialize colorama
+init(autoreset=True)
 from dataset import ArxivDownloader, AdaptiveRateLimiter, download_arxiv_metadata
 from helpers import load_data, filter_lhcb_papers, pinecone_embedding_count
 from sentence_transformers import SentenceTransformer
@@ -222,77 +227,155 @@ def create_embeddings(
     Returns:
         List of tuples containing (paper_id, embedding_vector, metadata)
     """
-    print("Entering create_embeddings function")
+    # Start timing the embedding process
+    start_time = time.time()
+    
+    print(f"{Fore.CYAN}╔════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     EMBEDDING CREATION STARTED        ║")
+    print(f"{Fore.CYAN}╚════════════════════════════════════════╝")
+    print(f"{Fore.GREEN}  Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     model_name = "BAAI/bge-large-en-v1.5"
-    print(f"Loading model: {model_name}")
+    print(f"{Fore.YELLOW} Loading model: {Fore.WHITE}{model_name}")
+    model_load_start = time.time()
     model = SentenceTransformer(model_name)
-    print(f"Successfully loaded {model_name}")
+    model_load_time = time.time() - model_load_start
+    print(f"{Fore.GREEN} Model loaded successfully in {model_load_time:.2f} seconds")
     
     embedding_data = []
     
     # Calculate and display PDF content statistics
     papers_with_pdf = sum(1 for p in papers if hasattr(p, '_cleaned_pdf_content') and p._cleaned_pdf_content)
-    print(f"\nPDF Content Statistics:")
-    print(f"Total papers: {len(papers)}")
-    print(f"Papers with PDF content: {papers_with_pdf}")
-    print(f"Using chunking: {chunk_mode}")
+    print(f"\n{Fore.CYAN} PDF Content Statistics:")
+    print(f"{Fore.WHITE} Total papers: {Fore.YELLOW}{len(papers)}")
+    print(f"{Fore.WHITE} Papers with PDF content: {Fore.YELLOW}{papers_with_pdf} ({papers_with_pdf/len(papers)*100:.1f}%)")
+    print(f"{Fore.WHITE} Using chunking: {Fore.YELLOW}{chunk_mode}")
+    
+    if chunk_mode:
+        print(f"{Fore.WHITE} Chunk size: {Fore.YELLOW}{chunk_size} words")
+        print(f"{Fore.WHITE} Chunk overlap: {Fore.YELLOW}{chunk_overlap} words")
+    
+    # Display memory usage
+    memory_info = ""
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_mb = process.memory_info().rss / 1024 / 1024
+        memory_info = f"{Fore.WHITE} Current memory usage: {Fore.YELLOW}{memory_mb:.1f} MB"
+    except ImportError:
+        pass
+    
+    if memory_info:
+        print(memory_info)
     
     # Display sample content for verification
     if papers:
         sample_paper = papers[0]
-        print("\nSample paper content structure:")
-        print(f"Paper ID: {sample_paper.id}")
-        print(f"Has PDF content: {bool(getattr(sample_paper, '_cleaned_pdf_content', None))}")
-        print(f"Embedding text length: {len(sample_paper.embedding_text)}")
-        print(f"Content preview (first 200 chars):")
-        print(sample_paper.embedding_text[:200] + "...")
+        print(f"\n{Fore.CYAN} Sample Paper Content:")
+        print(f"{Fore.WHITE} Paper ID: {Fore.YELLOW}{sample_paper.id}")
+        print(f"{Fore.WHITE} Has PDF content: {Fore.GREEN if bool(getattr(sample_paper, '_cleaned_pdf_content', None)) else Fore.RED}{bool(getattr(sample_paper, '_cleaned_pdf_content', None))}")
+        print(f"{Fore.WHITE} Embedding text length: {Fore.YELLOW}{len(sample_paper.embedding_text)} chars")
+        
+        if hasattr(sample_paper, '_cleaned_pdf_content') and sample_paper._cleaned_pdf_content:
+            pdf_text_ratio = len(sample_paper._cleaned_pdf_content) / len(sample_paper.embedding_text) * 100
+            print(f"{Fore.WHITE} PDF content proportion: {Fore.YELLOW}{pdf_text_ratio:.1f}% of embedding text")
+        
+        print(f"{Fore.WHITE}  Content preview (first 200 chars):")
+        print(f"{Fore.CYAN}{sample_paper.embedding_text[:200]}...")
+        
+        # Debug information about cleaning process if PDF exists
+        if hasattr(sample_paper, '_pdf_content') and sample_paper._pdf_content:
+            original_len = len(sample_paper._pdf_content)
+            cleaned_len = len(sample_paper._cleaned_pdf_content) if hasattr(sample_paper, '_cleaned_pdf_content') else 0
+            if original_len > 0:
+                cleaning_ratio = cleaned_len / original_len * 100
+                print(f"{Fore.WHITE} PDF cleaning preserved: {Fore.YELLOW}{cleaning_ratio:.1f}% of original content")
+                print(f"{Fore.WHITE} Original PDF size: {Fore.YELLOW}{original_len} chars")
+                print(f"{Fore.WHITE} Cleaned PDF size: {Fore.YELLOW}{cleaned_len} chars")
     
     # Process papers in batches
+    print(f"\n{Fore.CYAN} Processing {Fore.YELLOW}{len(papers)}{Fore.CYAN} papers:")
+    
+    # Setup tqdm progress bar for papers
+    progress_bar = tqdm(
+        total=len(papers),
+        desc=f"{Fore.GREEN}Embedding papers",
+        unit="paper",
+        bar_format="{l_bar}{bar:30}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+    )
+    
+    # Process all batches with enhanced tracking
+    embedding_start_time = time.time()
+    total_chunks = 0
+    errors = 0
+    
     for i in range(0, len(papers), batch_size):
+        batch_start_time = time.time()
         batch = papers[i:i + batch_size]
+        
+        batch_num = i // batch_size + 1
+        total_batches = (len(papers) + batch_size - 1) // batch_size
+        print(f"\n{Fore.YELLOW} Processing batch {Fore.WHITE}{batch_num}/{total_batches} {Fore.YELLOW}with {Fore.WHITE}{len(batch)}{Fore.YELLOW} papers")
         
         # Handle chunking mode
         if chunk_mode:
             chunk_texts = []
             chunk_paper_ids = []
             chunk_metadata = []
+            papers_with_chunks = 0
             
+            # First pass to count total chunks for better progress tracking
+            batch_chunks_count = 0
+            
+            # Process each paper in the batch
             for paper in batch:
+                paper_start_time = time.time()
+                
                 if paper._cleaned_pdf_content:
                     # Get base metadata for all chunks
                     base_metadata = paper.metadata
                     
-                    # Create chunks from the paper content
-                    chunks = PDFCleaner.chunk_content(
-                        paper._cleaned_pdf_content, 
-                        chunk_size=chunk_size, 
-                        overlap=chunk_overlap
-                    )
-                    
-                    for idx, chunk in enumerate(chunks):
-                        # Prepare text for embedding with metadata but just this chunk
-                        # Authors are excluded from embedding text but kept in metadata
-                        chunk_text = (
-                            f"Title: {paper.title} "
-                            f"Year: {paper.year} "
-                            f"Abstract: {paper.abstract} "
-                            f"Content chunk {idx+1}/{len(chunks)}: {chunk}"
+                    try:
+                        # Create chunks from the paper content
+                        chunks = PDFCleaner.chunk_content(
+                            paper._cleaned_pdf_content, 
+                            chunk_size=chunk_size, 
+                            overlap=chunk_overlap
                         )
-                        chunk_texts.append(chunk_text)
                         
-                        # Create unique ID for each chunk
-                        chunk_id = f"{paper.id}_chunk_{idx}"
-                        chunk_paper_ids.append(chunk_id)
+                        # Debugging for chunk creation
+                        paper_chunk_count = len(chunks)
+                        batch_chunks_count += paper_chunk_count
+                        if paper_chunk_count > 0:
+                            papers_with_chunks += 1
+                            print(f"{Fore.WHITE}  - Paper {Fore.CYAN}{paper.id}{Fore.WHITE}: {Fore.YELLOW}{paper_chunk_count}{Fore.WHITE} chunks created")
                         
-                        # Add chunk info to metadata
-                        chunk_metadata.append({
-                            **base_metadata,
-                            "chunk_id": idx,
-                            "total_chunks": len(chunks),
-                            "is_chunk": True,
-                            "parent_id": paper.id
-                        })
+                        for idx, chunk in enumerate(chunks):
+                            # Prepare text for embedding with metadata but just this chunk
+                            # Authors are excluded from embedding text but kept in metadata (per user preference)
+                            chunk_text = (
+                                f"Title: {paper.title} "
+                                f"Year: {paper.year} "
+                                f"Abstract: {paper.abstract} "
+                                f"Content chunk {idx+1}/{len(chunks)}: {chunk}"
+                            )
+                            chunk_texts.append(chunk_text)
+                            
+                            # Create unique ID for each chunk
+                            chunk_id = f"{paper.id}_chunk_{idx}"
+                            chunk_paper_ids.append(chunk_id)
+                            
+                            # Add chunk info to metadata
+                            chunk_metadata.append({
+                                **base_metadata,
+                                "chunk_id": idx,
+                                "total_chunks": len(chunks),
+                                "is_chunk": True,
+                                "parent_id": paper.id
+                            })
+                    except Exception as e:
+                        errors += 1
+                        print(f"{Fore.RED} Error creating chunks for paper {paper.id}: {str(e)}")
                 else:
                     # For papers without PDF content, use standard embedding
                     chunk_texts.append(paper.embedding_text)
@@ -301,12 +384,26 @@ def create_embeddings(
                         **paper.metadata,
                         "is_chunk": False
                     })
+                
+                # Track paper completion time
+                paper_time = time.time() - paper_start_time
+                if paper_time > 1.0:  # Only show times over 1 second
+                    print(f"{Fore.WHITE}  - Paper processing time: {Fore.YELLOW}{paper_time:.2f}s")
+            
+            # Update the total chunk counter
+            total_chunks += batch_chunks_count
             
             try:
                 # Create embeddings for all chunks
                 if chunk_texts:
-                    print(f"\nProcessing batch with {len(chunk_texts)} chunks")
-                    chunk_embeddings = model.encode(chunk_texts, show_progress_bar=True)
+                    print(f"{Fore.GREEN} Creating embeddings for {Fore.YELLOW}{len(chunk_texts)}{Fore.GREEN} chunks from {Fore.YELLOW}{papers_with_chunks}{Fore.GREEN} papers with content")
+                    
+                    # Use our own tqdm progress instead of the default one
+                    encode_start = time.time()
+                    chunk_embeddings = model.encode(chunk_texts, show_progress_bar=False)
+                    encode_time = time.time() - encode_start
+                    
+                    print(f"{Fore.GREEN} Embeddings created in {Fore.YELLOW}{encode_time:.2f}s {Fore.GREEN}({Fore.YELLOW}{len(chunk_texts)/encode_time:.1f}{Fore.GREEN} chunks/sec)")
                     
                     # Store chunk embeddings with metadata
                     for paper_id, embedding, metadata in zip(chunk_paper_ids, chunk_embeddings, chunk_metadata):
@@ -316,39 +413,93 @@ def create_embeddings(
                             metadata
                         ))
             except Exception as e:
-                print(f"Error processing chunk batch: {str(e)}")
-                print("Skipping problematic chunks and continuing...")
-                continue
-                
+                errors += 1
+                print(f"{Fore.RED} Error processing chunk batch: {str(e)}")
+        
+        # Standard non-chunking mode
         else:
-            # Standard mode (no chunking)
-            texts = [p.embedding_text for p in batch]
+            batch_texts = []
+            batch_ids = []
+            batch_metadata = []
             
-            # Display statistics for first batch
-            if i == 0:
-                print(f"\nFirst batch statistics:")
-                print(f"Batch size: {len(texts)}")
-                print(f"Average text length: {sum(len(t) for t in texts) / len(texts):.0f} chars")
-            
-            try:
-                embeddings = model.encode(texts, show_progress_bar=True)
-                
-                # Store embeddings with metadata
-                for paper, embedding in zip(batch, embeddings):
-                    embedding_data.append((
-                        paper.id,
-                        embedding.tolist(),
-                        paper.metadata
-                    ))
+            # Process each paper in batch
+            for paper in batch:
+                paper_start = time.time()
+                try:
+                    batch_texts.append(paper.embedding_text)
+                    batch_ids.append(paper.id)
+                    batch_metadata.append(paper.metadata)
                     
-                print(f"Processed {min(i + batch_size, len(papers))}/{len(papers)} papers")
+                    paper_time = time.time() - paper_start
+                    if paper_time > 0.5:  # Only log slow papers
+                        print(f"{Fore.WHITE}  - Paper {Fore.CYAN}{paper.id}{Fore.WHITE}: processed in {Fore.YELLOW}{paper_time:.2f}s")
+                except Exception as e:
+                    errors += 1
+                    print(f"{Fore.RED} Error processing paper {paper.id}: {str(e)}")
                 
+            try:
+                # Create embeddings for the batch
+                if batch_texts:
+                    print(f"{Fore.GREEN} Creating embeddings for {Fore.YELLOW}{len(batch_texts)}{Fore.GREEN} papers")
+                    
+                    # Use our own tqdm progress instead of the default one
+                    encode_start = time.time()
+                    batch_embeddings = model.encode(batch_texts, show_progress_bar=False) 
+                    encode_time = time.time() - encode_start
+                    
+                    print(f"{Fore.GREEN} Embeddings created in {Fore.YELLOW}{encode_time:.2f}s {Fore.GREEN}({Fore.YELLOW}{len(batch_texts)/encode_time:.1f}{Fore.GREEN} papers/sec)")
+                    
+                    # Store embeddings with their metadata
+                    for paper_id, embedding, metadata in zip(batch_ids, batch_embeddings, batch_metadata):
+                        embedding_data.append((
+                            paper_id,
+                            embedding.tolist(),
+                            metadata
+                        ))
             except Exception as e:
-                print(f"Error processing batch {i//batch_size}: {str(e)}")
-                print("Skipping problematic batch and continuing...")
-                continue
+                errors += 1
+                print(f"{Fore.RED} Error processing standard batch: {str(e)}")
+        
+        # Update progress bar and show batch timing
+        progress_bar.update(len(batch))
+        batch_time = time.time() - batch_start_time
+        print(f"{Fore.CYAN}  Batch processing time: {Fore.YELLOW}{batch_time:.2f}s {Fore.CYAN}({Fore.YELLOW}{len(batch)/batch_time:.1f}{Fore.CYAN} papers/sec)")
     
-    print(f"\nCreated {len(embedding_data)} embeddings")
+    # Close the progress bar
+    progress_bar.close()
+    
+    # Show final statistics for the whole embedding process
+    total_embedding_time = time.time() - embedding_start_time
+    papers_per_second = len(papers) / total_embedding_time if total_embedding_time > 0 else 0
+    
+    print(f"\n{Fore.CYAN} Embedding Process Summary:")
+    print(f"{Fore.WHITE}  Total time: {Fore.YELLOW}{total_embedding_time:.2f} seconds")
+    print(f"{Fore.WHITE}Processing speed: {Fore.YELLOW}{papers_per_second:.2f} papers/second")
+    print(f"{Fore.WHITE} Total papers processed: {Fore.YELLOW}{len(papers)}")
+    
+    if chunk_mode:
+        print(f"{Fore.WHITE} Total chunks created: {Fore.YELLOW}{total_chunks}")
+        print(f"{Fore.WHITE} Average chunks per paper: {Fore.YELLOW}{total_chunks/len(papers):.1f}")
+    
+    if errors > 0:
+        print(f"{Fore.RED} Encountered {errors} errors during processing")
+        
+    embeddings_created = len(embedding_data)
+    print(f"{Fore.GREEN} Successfully created {Fore.YELLOW}{embeddings_created}{Fore.GREEN} embeddings")
+    
+    # Calculate and display memory usage
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_mb = process.memory_info().rss / 1024 / 1024
+        print(f"{Fore.WHITE} Final memory usage: {Fore.YELLOW}{memory_mb:.1f} MB")
+    except ImportError:
+        pass
+        
+    # Track total function execution time
+    total_time = time.time() - start_time
+    print(f"{Fore.GREEN}  Total embedding creation time: {Fore.YELLOW}{total_time:.2f} seconds")
+    
     return embedding_data
 
 
@@ -442,16 +593,41 @@ def store_embeddings(embedding_data: List[Tuple[str, List[float], Dict]], index_
 
 
 def main():
-    print("Starting script execution")
+    # Start timing the entire process
+    main_start_time = time.time()
+    start_datetime = datetime.now()
+    
+    # Print fancy header
+    print(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║        LHCb FINDER - EMBEDDING PIPELINE        ║")
+    print(f"{Fore.CYAN}╚══════════════════════════════════════════════════════╝")
+    print(f"{Fore.GREEN}  Started at: {start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Check environment variables with better formatting
+    print(f"\n{Fore.YELLOW} Checking environment variables...")
     required_env_vars = ["PINECONE_API_KEY", "PINECONE_INDEX_NAME"]
     
     for env_var in required_env_vars:
         if env_var not in os.environ and f"{env_var}=" not in os.environ:
-            print(f"Error: Environment variable {env_var} is not set.")
-            print("Please set it and try again.")
+            print(f"{Fore.RED}❌ Error: Environment variable {env_var} is not set.")
+            print(f"{Fore.RED}Please set it and try again.")
             sys.exit(1)
+        else:
+            print(f"{Fore.GREEN}✓ {env_var}: {'*' * 8 if 'KEY' in env_var else os.environ.get(env_var)}")
+    
+    print(f"{Fore.GREEN} All required environment variables verified!")
+    
+    # Initialize memory tracking if available
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        initial_memory = process.memory_info().rss / 1024 / 1024
+        print(f"{Fore.WHITE} Initial memory usage: {Fore.YELLOW}{initial_memory:.1f} MB")
+    except ImportError:
+        initial_memory = None
     
     # Parse command line arguments
+    print(f"\n{Fore.CYAN} Parsing command line arguments...")
     parser = argparse.ArgumentParser(description="Create embeddings for LHCb papers")
     parser.add_argument("--include-pdf", action="store_true", help="Include PDF content in embeddings")
     parser.add_argument("--download-pdfs", action="store_true", help="Download new PDFs")
@@ -469,37 +645,96 @@ def main():
     
     args = parser.parse_args()
     
-    print("Environment variables verified...")
-    print("Args parsed:")
-    print(f"- include_pdf: {args.include_pdf}")
-    print(f"- pdf_dir: {args.pdf_dir}")
-    print(f"- chunk_mode: {args.chunk_mode}")
-    if args.chunk_mode:
-        print(f"- chunk_size: {args.chunk_size}")
-        print(f"- chunk_overlap: {args.chunk_overlap}")
-    if args.test_mode:
-        print(f"- test_mode: {args.test_mode}")
-        print(f"- limit: {args.limit}")
+    # Print arguments with colorful formatting
+    print(f"\n{Fore.CYAN} Command Line Arguments:")
+    # Common arguments
+    print(f"{Fore.WHITE} Include PDF: {Fore.YELLOW}{args.include_pdf}")
+    print(f"{Fore.WHITE} PDF directory: {Fore.YELLOW}{args.pdf_dir}")
+    print(f"{Fore.WHITE} Download PDFs: {Fore.YELLOW}{args.download_pdfs}")
+    print(f"{Fore.WHITE} Force PDF download: {Fore.YELLOW}{args.force_pdf_download}")
+    print(f"{Fore.WHITE} Force ArXiv download: {Fore.YELLOW}{args.force_arxiv_download}")
+    print(f"{Fore.WHITE} Force embeddings: {Fore.YELLOW}{args.force_embeddings}")
     
-    # First, check if we have the arXiv JSON file
+    # Chunking options
+    print(f"{Fore.WHITE} Chunk mode: {Fore.YELLOW}{args.chunk_mode}")
+    if args.chunk_mode:
+        print(f"{Fore.WHITE} Chunk size: {Fore.YELLOW}{args.chunk_size} words")
+        print(f"{Fore.WHITE} Chunk overlap: {Fore.YELLOW}{args.chunk_overlap} words")
+    
+    # Test mode options
+    if args.test_mode:
+        print(f"{Fore.WHITE} Test mode: {Fore.YELLOW}{args.test_mode}")
+        print(f"{Fore.WHITE} Paper limit: {Fore.YELLOW}{args.limit}")
+    
+    # Start year if provided
+    if args.start_year:
+        print(f"{Fore.WHITE} Start year: {Fore.YELLOW}{args.start_year}")
+        
+    print(f"{Fore.WHITE} Skip confirmation: {Fore.YELLOW}{args.no_confirmation}")
+    
+    # Print section header for arXiv download
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 1: DATA PREPARATION     ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
+    
+    # First, check if we have the ArXiv JSON file
     JSON_FILE_PATH = "arxiv-metadata-oai-snapshot.json"
-    print(f"Checking if JSON file exists at: {JSON_FILE_PATH}")
+    print(f"{Fore.YELLOW} Checking if ArXiv dataset exists at: {Fore.WHITE}{JSON_FILE_PATH}")
     
     if not os.path.exists(JSON_FILE_PATH) or args.force_arxiv_download:
-        print("Starting arXiv data download using Kaggle API...")
-        download_arxiv_metadata()
+        if args.force_arxiv_download:
+            print(f"{Fore.YELLOW} Force download flag set, downloading fresh ArXiv dataset")
+        else:
+            print(f"{Fore.YELLOW} Dataset not found, downloading ArXiv data")
+            
+        print(f"{Fore.CYAN} Starting Kaggle download of ArXiv metadata...")
+        download_start = time.time()
+        
+        # Show a spinner or progress indicator since this can take a while
+        try:
+            from yaspin import yaspin
+            from yaspin.spinners import Spinners
+            with yaspin(Spinners.moon, text="Downloading ArXiv dataset from Kaggle") as sp:
+                download_arxiv_metadata()
+                sp.text = "Download complete!"
+                sp.ok("")
+        except ImportError:
+            # Fallback if yaspin is not available
+            print(f"{Fore.YELLOW} Downloading ArXiv dataset... (this may take a while)")
+            download_arxiv_metadata()
+            print(f"{Fore.GREEN} ArXiv dataset download complete!")
+            
+        download_time = time.time() - download_start
+        print(f"{Fore.GREEN} ArXiv dataset download completed in {Fore.YELLOW}{download_time:.1f} seconds {Fore.GREEN}({Fore.YELLOW}{download_time/60:.1f} minutes)")
+        
+        # Check file size
+        if os.path.exists(JSON_FILE_PATH):
+            file_size_bytes = os.path.getsize(JSON_FILE_PATH)
+            file_size_gb = file_size_bytes / (1024 ** 3)  # Convert to GB
+            print(f"{Fore.GREEN} Downloaded file size: {Fore.YELLOW}{file_size_gb:.2f} GB")
+    else:
+        # File exists and no force download
+        file_size_bytes = os.path.getsize(JSON_FILE_PATH)
+        file_size_gb = file_size_bytes / (1024 ** 3)  # Convert to GB
+        print(f"{Fore.GREEN} ArXiv dataset found! {Fore.WHITE}({Fore.YELLOW}{file_size_gb:.2f} GB{Fore.WHITE})")
     
     # Set up directory for PDFs if needed
     if args.include_pdf:
+        print(f"{Fore.YELLOW} Setting up PDF directory: {Fore.WHITE}{args.pdf_dir}")
         os.makedirs(args.pdf_dir, exist_ok=True)
     
-    print("\nStep 1: Loading and filtering papers...")
+    print(f"\n{Fore.CYAN} Loading and filtering papers...")
+    load_start_time = time.time()
     
     # Note for include_pdf
     if args.include_pdf:
-        print("Using include_pdf=True for loading papers")
-        
-    # Load and filter papers
+        print(f"{Fore.YELLOW} Including PDF content in embeddings")
+    
+    # Create a spinner or progress indicator for paper loading    
+    print(f"{Fore.YELLOW} Loading papers from ArXiv dataset...")
+    
+    # Load and filter papers with timing
+    loading_start = time.time()
     paper_generator = load_data(
         JSON_FILE_PATH,
         pdf_dir=args.pdf_dir if args.include_pdf else None,
@@ -507,124 +742,351 @@ def main():
         start_year=args.start_year
     )
     
-    # If in test mode, limit the number of papers
+    # If in test mode, limit the number of papers with progress indicator
     if args.test_mode:
-        print(f"TEST MODE: Limiting to {args.limit} papers")
+        print(f"{Fore.MAGENTA} TEST MODE: Limiting to {args.limit} papers")
+        all_papers = []
+        with tqdm(total=args.limit, desc=f"{Fore.GREEN}Loading papers", unit="paper") as pbar:
+            for i, paper in enumerate(paper_generator):
+                all_papers.append(paper)
+                pbar.update(1)
+                if i >= args.limit - 1:  # -1 because i starts at 0
+                    break
+    else:
+        # For full mode, we can't know the total count in advance, use simple progress indicator
+        print(f"{Fore.YELLOW} Loading all papers from dataset (this may take a while)...")
         all_papers = []
         for i, paper in enumerate(paper_generator):
             all_papers.append(paper)
-            if i >= args.limit - 1:  # -1 because i starts at 0
-                break
-    else:
-        all_papers = list(paper_generator)
+            # Print progress every 50,000 papers
+            if (i + 1) % 50000 == 0:
+                print(f"{Fore.GREEN} Loaded {i + 1} papers so far...")
+    
+    # Calculate loading time and speed
+    loading_time = time.time() - loading_start
+    papers_per_second = len(all_papers) / loading_time if loading_time > 0 else 0
+    
+    print(f"{Fore.GREEN} Loaded {Fore.YELLOW}{len(all_papers):,}{Fore.GREEN} total papers in {Fore.YELLOW}{loading_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{papers_per_second:.1f}{Fore.GREEN} papers/sec)")
+    
+    # Print some information about the dataset
+    years = {}
+    categories = {}
+    for paper in all_papers[:1000]:  # Sample first 1000 papers for quick stats
+        year = getattr(paper, 'year', 0)
+        years[year] = years.get(year, 0) + 1
         
-    print(f"Loaded {len(all_papers)} total papers")
+        for category in getattr(paper, 'categories', []):
+            categories[category] = categories.get(category, 0) + 1
+    
+    if years:
+        print(f"{Fore.CYAN} Sample Data Statistics (first 1000 papers):")
+        print(f"{Fore.WHITE} Years: {Fore.YELLOW}{sorted(years.keys())[:5]}...")
+        top_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:5]
+        print(f"{Fore.WHITE} Top categories: {', '.join([f'{cat} ({count})' for cat, count in top_categories])}")
+
     
     if args.include_pdf:
-        # Verify PDF downloads
-        papers_with_pdf, papers_without_pdf = verify_pdf_downloads(all_papers, args.pdf_dir)
+        print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
+        print(f"{Fore.CYAN}║     STAGE 2: PDF VERIFICATION     ║")
+        print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
         
-        # Show PDF content stats
+        # Verify PDF downloads with timing
+        print(f"{Fore.YELLOW} Verifying PDF downloads...")
+        pdf_verify_start = time.time()
+        papers_with_pdf, papers_without_pdf = verify_pdf_downloads(all_papers, args.pdf_dir)
+        pdf_verify_time = time.time() - pdf_verify_start
+        
+        print(f"{Fore.GREEN} PDF verification completed in {Fore.YELLOW}{pdf_verify_time:.1f}s")
+        
+        # Show PDF content stats with enhanced formatting
         pdf_content_count = sum(1 for p in all_papers if hasattr(p, '_cleaned_pdf_content') and p._cleaned_pdf_content)
         pdf_content_ratio = pdf_content_count / len(all_papers) * 100 if all_papers else 0
         
-        print(f"\nPDF Content Summary:")
-        print(f"- Papers with extractable PDF content: {pdf_content_count}/{len(all_papers)} ({pdf_content_ratio:.1f}%)")
+        print(f"\n{Fore.CYAN} PDF Content Summary:")
+        pdf_color = Fore.GREEN if pdf_content_ratio > 70 else (Fore.YELLOW if pdf_content_ratio > 30 else Fore.RED)
+        print(f"{Fore.WHITE} Papers with extractable PDF content: {pdf_color}{pdf_content_count}/{len(all_papers)} ({pdf_content_ratio:.1f}%)")
+        
+        # Calculate average cleaning effectiveness 
+        pdf_sizes = [(len(getattr(p, '_pdf_content', "")), len(getattr(p, '_cleaned_pdf_content', ""))) 
+                   for p in all_papers if hasattr(p, '_pdf_content') and p._pdf_content]
+        
+        if pdf_sizes:
+            avg_original_size = sum(orig for orig, _ in pdf_sizes) / len(pdf_sizes)
+            avg_cleaned_size = sum(cleaned for _, cleaned in pdf_sizes) / len(pdf_sizes)
+            avg_preservation = (avg_cleaned_size / avg_original_size * 100) if avg_original_size > 0 else 0
+            
+            preservation_color = Fore.GREEN if avg_preservation > 60 else (Fore.YELLOW if avg_preservation > 30 else Fore.RED)
+            print(f"{Fore.WHITE} Average PDF cleaning preservation: {preservation_color}{avg_preservation:.1f}%")
+            print(f"{Fore.WHITE} Average original PDF size: {Fore.YELLOW}{avg_original_size:.0f} chars")
+            print(f"{Fore.WHITE} Average cleaned PDF size: {Fore.YELLOW}{avg_cleaned_size:.0f} chars")
         
         # Add diagnostic for empty PDF content after cleaning
         if pdf_content_count < len(papers_with_pdf):
             cleaned_empty_count = sum(1 for p in all_papers 
                               if hasattr(p, '_cleaned_pdf_content') and 
                                  (not p._cleaned_pdf_content or len(p._cleaned_pdf_content) < 200))
-            print(f"- Papers where PDF content cleaning removed too much text: {cleaned_empty_count}")
             
-            # Attempt recovery of these papers with minimal cleaning
-            recovered = 0
-            for paper in all_papers:
-                if (hasattr(paper, '_cleaned_pdf_content') and 
-                   (not paper._cleaned_pdf_content or len(paper._cleaned_pdf_content) < 200) and
-                   hasattr(paper, '_pdf_content') and
-                   paper._pdf_content and
-                   len(paper._pdf_content) >= 200):
-                    # Try minimal cleaning
-                    paper._cleaned_pdf_content = PDFCleaner._fallback_cleaning(
-                        paper._pdf_content, paper.title, paper.abstract
-                    )
-                    if paper._cleaned_pdf_content and len(paper._cleaned_pdf_content) >= 200:
-                        recovered += 1
+            print(f"{Fore.RED} Papers where PDF cleaning removed too much text: {cleaned_empty_count}")
+            
+            # Attempt recovery of these papers with improved cleaning approaches
+            print(f"{Fore.YELLOW} Attempting recovery of papers with insufficient content...")
+            recovery_start = time.time()
+            
+            with tqdm(total=cleaned_empty_count, desc=f"{Fore.YELLOW}Recovering papers", unit="paper") as pbar:
+                recovered = 0
+                for paper in all_papers:
+                    if (hasattr(paper, '_cleaned_pdf_content') and 
+                      (not paper._cleaned_pdf_content or len(paper._cleaned_pdf_content) < 200) and
+                      hasattr(paper, '_pdf_content') and
+                      paper._pdf_content and
+                      len(paper._pdf_content) >= 200):
                         
+                        # First try basic cleaning
+                        try:
+                            paper._cleaned_pdf_content = PDFCleaner._basic_cleaning(
+                                paper._pdf_content, paper.title, paper.abstract
+                            )
+                            
+                            # If basic cleaning doesn't give enough content, fall back to minimal cleaning
+                            if not paper._cleaned_pdf_content or len(paper._cleaned_pdf_content) < 200:
+                                paper._cleaned_pdf_content = PDFCleaner._fallback_cleaning(
+                                    paper._pdf_content, paper.title, paper.abstract
+                                )
+                                
+                            if paper._cleaned_pdf_content and len(paper._cleaned_pdf_content) >= 200:
+                                recovered += 1
+                                
+                        except Exception as e:
+                            # Silently continue if recovery fails
+                            pass
+                            
+                        pbar.update(1)
+            
+            recovery_time = time.time() - recovery_start
+            
             if recovered > 0:
-                print(f"- Successfully recovered PDF content for {recovered} papers using minimal cleaning")
+                print(f"{Fore.GREEN} Successfully recovered PDF content for {Fore.YELLOW}{recovered}{Fore.GREEN} papers in {Fore.YELLOW}{recovery_time:.1f}s")
+                
                 # Update PDF content count after recovery
                 pdf_content_count = sum(1 for p in all_papers if hasattr(p, '_cleaned_pdf_content') and p._cleaned_pdf_content and len(p._cleaned_pdf_content) >= 200)
                 pdf_content_ratio = pdf_content_count / len(all_papers) * 100 if all_papers else 0
-                print(f"- Updated papers with usable PDF content: {pdf_content_count}/{len(all_papers)} ({pdf_content_ratio:.1f}%)")
+                pdf_color = Fore.GREEN if pdf_content_ratio > 70 else (Fore.YELLOW if pdf_content_ratio > 30 else Fore.RED)
+                print(f"{Fore.WHITE} Updated papers with usable PDF content: {pdf_color}{pdf_content_count}/{len(all_papers)} ({pdf_content_ratio:.1f}%)")
+            else:
+                print(f"{Fore.RED} No papers could be recovered with improved cleaning methods")
+        
+        # Add statistics on which cleaning method was most effective
+        basic_count = 0
+        full_count = 0
+        fallback_count = 0
+        
+        for paper in all_papers:
+            if not hasattr(paper, '_pdf_content') or not paper._pdf_content:
+                continue
+                
+            orig_size = len(paper._pdf_content)
+            cleaned_size = len(getattr(paper, '_cleaned_pdf_content', ""))
+            
+            if cleaned_size < 200:
+                continue
+                
+            ratio = cleaned_size / orig_size if orig_size > 0 else 0
+            
+            # Estimate which cleaning method was likely used based on preservation ratio
+            if ratio > 0.7:
+                fallback_count += 1  # Very high preservation suggests fallback cleaning
+            elif ratio > 0.4:
+                basic_count += 1     # Medium preservation suggests basic cleaning
+            else:
+                full_count += 1      # Low preservation suggests full cleaning
+        
+        print(f"\n{Fore.CYAN} Cleaning Method Statistics:")
+        print(f"{Fore.WHITE} Estimated usage of cleaning methods:")
+        print(f"{Fore.WHITE} - Basic cleaning: {Fore.YELLOW}{basic_count} papers")
+        print(f"{Fore.WHITE} - Full cleaning: {Fore.YELLOW}{full_count} papers")
+        print(f"{Fore.WHITE} - Fallback cleaning: {Fore.YELLOW}{fallback_count} papers")
     
     # Download PDFs if requested
     if args.download_pdfs:
-        print("\nStep 2: Downloading PDFs...")
-        download_new_pdfs(all_papers, args.pdf_dir, force_download=args.force_pdf_download)
+        print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
+        print(f"{Fore.CYAN}║     STAGE 3: PDF DOWNLOAD      ║")
+        print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
+        download_start = time.time()
+        successful, failed = download_new_pdfs(all_papers, args.pdf_dir, force_download=args.force_pdf_download)
+        download_time = time.time() - download_start
+        print(f"{Fore.GREEN} PDF download completed in {Fore.YELLOW}{download_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{download_time/60:.1f} minutes)")
+        print(f"{Fore.WHITE} Successfully downloaded: {Fore.GREEN}{len(successful)}{Fore.WHITE} PDFs")
+        print(f"{Fore.WHITE} Failed downloads: {Fore.RED}{len(failed)}{Fore.WHITE} PDFs")
     
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 4: LHCb FILTERING     ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
+    
+    print(f"{Fore.YELLOW} Filtering for LHCb papers...")
+    filtering_start = time.time()
     lhcb_papers = list(filter_lhcb_papers(all_papers))
-    print(f"Found {len(lhcb_papers)} LHCb papers total")
+    filtering_time = time.time() - filtering_start
+    
+    # Stats for LHCb papers
+    lhcb_ratio = len(lhcb_papers) / len(all_papers) * 100 if all_papers else 0
+    papers_color = Fore.GREEN if len(lhcb_papers) > 50 else (Fore.YELLOW if len(lhcb_papers) > 10 else Fore.RED)
+    
+    print(f"{Fore.GREEN} Found {papers_color}{len(lhcb_papers)}{Fore.GREEN} LHCb papers in {Fore.YELLOW}{filtering_time:.2f}s {Fore.WHITE}({Fore.YELLOW}{lhcb_ratio:.2f}%{Fore.WHITE} of total papers)")
     
     # Recheck PDF content after filtering
     papers_with_pdf = sum(1 for p in lhcb_papers if hasattr(p, '_cleaned_pdf_content') and p._cleaned_pdf_content)
-    print(f"LHCb papers with PDF content: {papers_with_pdf}")
+    pdf_ratio = papers_with_pdf / len(lhcb_papers) * 100 if lhcb_papers else 0
+    pdf_color = Fore.GREEN if pdf_ratio > 70 else (Fore.YELLOW if pdf_ratio > 30 else Fore.RED)
+    
+    print(f"{Fore.WHITE} LHCb papers with PDF content: {pdf_color}{papers_with_pdf}/{len(lhcb_papers)} ({pdf_ratio:.1f}%)")
     
     if len(lhcb_papers) == 0:
-        print("Error: No LHCb papers found in the dataset")
+        print(f"{Fore.RED} Error: No LHCb papers found in the dataset")
+        
+        # Show completion time before exiting
+        total_time = time.time() - main_start_time
+        print(f"\n{Fore.RED} Pipeline terminated due to no LHCb papers found")
+        print(f"{Fore.WHITE}⏱ Total execution time: {Fore.YELLOW}{total_time:.1f}s {Fore.WHITE}({Fore.YELLOW}{total_time/60:.1f} minutes)")
         return
+    
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 5: EMBEDDING PREPARATION     ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
             
     if not os.path.exists("lhcb-arxiv-embeddings.json"):
-        print(f"No existing embedding file found at lhcb-arxiv-embeddings.json")
-        print("All papers should need embeddings")
+        print(f"{Fore.YELLOW} No existing embedding file found at lhcb-arxiv-embeddings.json")
+        print(f"{Fore.YELLOW} All papers will need embeddings")
         papers_to_process = lhcb_papers
         is_new_index = True
     else:
+        # Get file stats for embeddings file
+        embedding_file_size = os.path.getsize("lhcb-arxiv-embeddings.json") / (1024 * 1024)  # MB
+        print(f"{Fore.GREEN} Found existing embedding file ({Fore.YELLOW}{embedding_file_size:.2f} MB{Fore.GREEN})")
+        
+        print(f"{Fore.YELLOW} Checking for papers needing embeddings...")
+        check_start = time.time()
         papers_to_process, is_new_index = get_papers_needing_embeddings(
             lhcb_papers, 
             os.environ["PINECONE_INDEX_NAME"], 
             "lhcb-arxiv-embeddings.json",
             force_embeddings=args.force_embeddings
         )
+        check_time = time.time() - check_start
+        print(f"{Fore.GREEN} Embedding check completed in {Fore.YELLOW}{check_time:.2f}s")
         
-    print(f"\nCurrent status:")
-    print(f"- Total LHCb papers found: {len(lhcb_papers)}")
-    print(f"- Papers needing embeddings: {len(papers_to_process)}")
-    print(f"- Using new/empty Pinecone index: {is_new_index}")
+    papers_to_process_ratio = len(papers_to_process) / len(lhcb_papers) * 100 if lhcb_papers else 0
+    need_embeddings_color = Fore.GREEN if papers_to_process_ratio < 30 else (Fore.YELLOW if papers_to_process_ratio < 70 else Fore.RED)
+    
+    print(f"\n{Fore.CYAN} Current Status:")
+    print(f"{Fore.WHITE} Total LHCb papers found: {papers_color}{len(lhcb_papers)}")
+    print(f"{Fore.WHITE} Papers needing embeddings: {need_embeddings_color}{len(papers_to_process)} {Fore.WHITE}({need_embeddings_color}{papers_to_process_ratio:.1f}%{Fore.WHITE})")
+    print(f"{Fore.WHITE} Using new/empty Pinecone index: {Fore.YELLOW}{is_new_index}")
         
     if not papers_to_process and not args.force_embeddings and not is_new_index:
-        print("\nNo new papers to process. Use --force-embeddings to override.")
+        print(f"\n{Fore.GREEN} No new papers to process.")
+        print(f"{Fore.WHITE} Hint: Use --force-embeddings to override and process all papers again.")
+        
+        # Show completion time before exiting
+        total_time = time.time() - main_start_time
+        print(f"\n{Fore.GREEN} Pipeline completed successfully (no new papers to process)")
+        print(f"{Fore.WHITE} Total execution time: {Fore.YELLOW}{total_time:.1f}s {Fore.WHITE}({Fore.YELLOW}{total_time/60:.1f} minutes)")
         return
     else:
-        print("\nProceeding with paper processing...")
+        print(f"\n{Fore.GREEN} Found {need_embeddings_color}{len(papers_to_process)}{Fore.GREEN} papers to process")
             
     if not args.no_confirmation:
-        print(f"\nReady to process {len(papers_to_process)} papers")
-        print(f"PDF content will{' not' if not args.include_pdf else ''} be included in embeddings.")
-        confirm = input("Type 'yes' if you wish to continue: ")
-        assert confirm == "yes"
+        print(f"\n{Fore.YELLOW}❗ Ready to process {Fore.WHITE}{len(papers_to_process)}{Fore.YELLOW} papers")
+        print(f"{Fore.WHITE} PDF content will{' '+Fore.RED+'not' if not args.include_pdf else ' '+Fore.GREEN} be included in embeddings.")
+        confirm = input(f"{Fore.YELLOW}❓ Type 'yes' if you wish to continue: ")
+        if confirm.lower() != "yes":
+            print(f"{Fore.RED} Embedding process cancelled by user")
+            return
+        print(f"{Fore.GREEN} Confirmation received")
 
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 6: EMBEDDING CREATION      ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
+    
     # Create embeddings for the papers
-    print(f"\nStep 3: Creating embeddings for {len(papers_to_process)} papers...")
+    embedding_start = time.time()
+    
     try:
+        # Call the enhanced create_embeddings function
         embedding_data = create_embeddings(
             papers_to_process,
             chunk_mode=args.chunk_mode,
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap
         )
-        print(f"Created {len(embedding_data)} embeddings")
+        embedding_time = time.time() - embedding_start
+        print(f"{Fore.GREEN} Created {Fore.YELLOW}{len(embedding_data)}{Fore.GREEN} embeddings in {Fore.YELLOW}{embedding_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{embedding_time/60:.1f} minutes)")
         
-        print("\nStep 4: Storing embeddings...")
+        # Storage phase
+        print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
+        print(f"{Fore.CYAN}║     STAGE 7: EMBEDDING STORAGE      ║")
+        print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
+        
+        storage_start = time.time()
         store_embeddings(embedding_data, os.environ["PINECONE_INDEX_NAME"], "lhcb-arxiv-embeddings.json", batch_size=50)
-        print("Embeddings stored successfully")
+        storage_time = time.time() - storage_start
+        
+        print(f"{Fore.GREEN} Embeddings stored successfully in {Fore.YELLOW}{storage_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{storage_time/60:.1f} minutes)")
+        
+        # Check the final file size of the embeddings
+        if os.path.exists("lhcb-arxiv-embeddings.json"):
+            final_size_mb = os.path.getsize("lhcb-arxiv-embeddings.json") / (1024 * 1024)
+            print(f"{Fore.GREEN} Final embeddings file size: {Fore.YELLOW}{final_size_mb:.2f} MB")
     except Exception as e:
-        print(f"Error during embedding creation/storage: {str(e)}")
+        print(f"{Fore.RED} Error during embedding creation/storage: {str(e)}")
+        # Print stack trace for debugging
+        import traceback
+        print(f"{Fore.RED}{traceback.format_exc()}")
         raise
     
-    print("\n✅ Pipeline complete successfully")
+    # Show overall execution time and summary
+    total_time = time.time() - main_start_time
+    hours = int(total_time // 3600)
+    minutes = int((total_time % 3600) // 60)
+    seconds = total_time % 60
+    
+    print(f"\n{Fore.GREEN} Pipeline completed successfully ")
+    print(f"{Fore.CYAN}╔═══════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║            EXECUTION SUMMARY           ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
+    
+    print(f"{Fore.WHITE} Started at: {Fore.YELLOW}{start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{Fore.WHITE} Finished at: {Fore.YELLOW}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if hours > 0:
+        print(f"{Fore.WHITE} Total execution time: {Fore.YELLOW}{hours}h {minutes}m {seconds:.1f}s")
+    elif minutes > 0:
+        print(f"{Fore.WHITE} Total execution time: {Fore.YELLOW}{minutes}m {seconds:.1f}s")
+    else:
+        print(f"{Fore.WHITE} Total execution time: {Fore.YELLOW}{seconds:.1f}s")
+        
+    # Final statistics summary
+    print(f"\n{Fore.CYAN} Final Statistics:")
+    print(f"{Fore.WHITE} Total papers processed: {Fore.YELLOW}{len(all_papers):,}")
+    print(f"{Fore.WHITE} LHCb papers found: {papers_color}{len(lhcb_papers)} {Fore.WHITE}({papers_color}{lhcb_ratio:.2f}%{Fore.WHITE})")
+    print(f"{Fore.WHITE} Papers with PDF content: {pdf_color}{papers_with_pdf} {Fore.WHITE}({pdf_color}{pdf_ratio:.1f}%{Fore.WHITE})")
+    print(f"{Fore.WHITE} Embeddings created: {Fore.GREEN}{len(embedding_data)}")
+    
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        final_memory = process.memory_info().rss / 1024 / 1024
+        if initial_memory is not None:
+            memory_diff = final_memory - initial_memory
+            print(f"{Fore.WHITE} Peak memory usage: {Fore.YELLOW}{final_memory:.1f} MB {Fore.WHITE}(+{Fore.YELLOW}{memory_diff:.1f} MB{Fore.WHITE})")
+        else:
+            print(f"{Fore.WHITE} Final memory usage: {Fore.YELLOW}{final_memory:.1f} MB")
+    except (ImportError, NameError):
+        pass
+    
+    # Reminder about embedding formatting     
+    print(f"\n{Fore.GREEN} Note: Per your preferences, author information is kept in metadata but excluded from embedding text.")
+    print(f"{Fore.GREEN} The embeddings focus on title, year, abstract, and content chunks for better semantic search.")
+    
     
 if __name__ == "__main__":
     main()
