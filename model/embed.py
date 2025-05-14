@@ -626,7 +626,7 @@ def main():
     
     # Print fancy header
     print(f"\n{Fore.CYAN}╔══════════════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║        LHCb FINDER - EMBEDDING PIPELINE        ║")
+    print(f"{Fore.CYAN}║        LHCb FINDER - EMBEDDING PIPELINE              ║")
     print(f"{Fore.CYAN}╚══════════════════════════════════════════════════════╝")
     print(f"{Fore.GREEN}  Started at: {start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
     
