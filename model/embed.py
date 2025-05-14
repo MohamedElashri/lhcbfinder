@@ -8,7 +8,7 @@ from typing import List, Tuple, Dict, Any
 import numpy as np
 from tqdm import tqdm
 from paper import Paper, PDFCleaner
-from dataset import ArxivDownloader, AdaptiveRateLimiter
+from dataset import ArxivDownloader, AdaptiveRateLimiter, download_arxiv_metadata
 from helpers import load_data, filter_lhcb_papers, pinecone_embedding_count
 from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone
@@ -272,9 +272,9 @@ def create_embeddings(
                     
                     for idx, chunk in enumerate(chunks):
                         # Prepare text for embedding with metadata but just this chunk
+                        # Authors are excluded from embedding text but kept in metadata
                         chunk_text = (
                             f"Title: {paper.title} "
-                            f"Authors: {paper.authors_string} "
                             f"Year: {paper.year} "
                             f"Abstract: {paper.abstract} "
                             f"Content chunk {idx+1}/{len(chunks)}: {chunk}"
