@@ -66,7 +66,7 @@ def load_data(json_file_path, pdf_dir=None, include_pdf=False, start_year=None):
     # Second pass: load only the filtered LHCb papers
     print("Second pass: loading the filtered LHCb papers...")
     with gzip.open(json_file_path, 'rt', encoding='utf-8') if json_file_path.endswith('.gz') else open(json_file_path, 'r', encoding='utf-8') as f:
-        for i, line in enumerate(tqdm(f, desc="Loading papers", unit="papers")):
+        for i, line in enumerate(tqdm(f, desc="Loading papers", unit=" papers")):
             try:
                 data_dict = json.loads(line)
                 paper_id = data_dict.get("id", "")

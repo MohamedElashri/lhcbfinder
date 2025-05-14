@@ -701,7 +701,7 @@ def main():
     
     # Print section header for arXiv download
     print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 1: DATA PREPARATION     ║")
+    print(f"{Fore.CYAN}║     STAGE 1: DATA PREPARATION         ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
     
     # First, check if we have the ArXiv JSON file
@@ -814,7 +814,7 @@ def main():
     
     if args.include_pdf:
         print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-        print(f"{Fore.CYAN}║     STAGE 2: PDF VERIFICATION     ║")
+        print(f"{Fore.CYAN}║     STAGE 2: PDF VERIFICATION         ║")
         print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
         
         # Verify PDF downloads with timing
@@ -936,7 +936,7 @@ def main():
     # Download PDFs if requested
     if args.download_pdfs:
         print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-        print(f"{Fore.CYAN}║     STAGE 3: PDF DOWNLOAD      ║")
+        print(f"{Fore.CYAN}║     STAGE 3: PDF DOWNLOAD             ║")
         print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
         download_start = time.time()
         successful, failed = download_new_pdfs(all_papers, args.pdf_dir, force_download=args.force_pdf_download)
@@ -946,7 +946,7 @@ def main():
         print(f"{Fore.WHITE} Failed downloads: {Fore.RED}{len(failed)}{Fore.WHITE} PDFs")
     
     print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 4: LHCb FILTERING     ║")
+    print(f"{Fore.CYAN}║     STAGE 4: LHCb FILTERING           ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
     
     print(f"{Fore.YELLOW} Filtering for LHCb papers...")
@@ -977,7 +977,7 @@ def main():
         return
     
     print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 5: EMBEDDING PREPARATION     ║")
+    print(f"{Fore.CYAN}║     STAGE 5: EMBEDDING PREPARATION            ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
             
     if not os.path.exists("lhcb-arxiv-embeddings.json"):
@@ -1031,7 +1031,7 @@ def main():
         print(f"{Fore.GREEN} Confirmation received")
 
     print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 6: EMBEDDING CREATION      ║")
+    print(f"{Fore.CYAN}║     STAGE 6: EMBEDDING CREATION               ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
     
     # Create embeddings for the papers
@@ -1050,7 +1050,7 @@ def main():
         
         # Storage phase
         print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-        print(f"{Fore.CYAN}║     STAGE 7: EMBEDDING STORAGE      ║")
+        print(f"{Fore.CYAN}║     STAGE 7: EMBEDDING STORAGE                ║")
         print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
         
         storage_start = time.time()
@@ -1078,7 +1078,7 @@ def main():
     
     print(f"\n{Fore.GREEN} Pipeline completed successfully ")
     print(f"{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║            EXECUTION SUMMARY           ║")
+    print(f"{Fore.CYAN}║            EXECUTION SUMMARY                  ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
     
     print(f"{Fore.WHITE} Started at: {Fore.YELLOW}{start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
