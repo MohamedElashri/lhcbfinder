@@ -178,7 +178,7 @@ To completely refresh all data:
 ```
 
 
-## All Available Options
+## Available Options
 
 ```bash
 --include-pdf             Include PDF content in embeddings
@@ -201,6 +201,6 @@ To completely refresh all data:
 ### lhcbfinder.net Production Setup
 To generate the complete production-ready version as deployed on lhcbfinder.net, use:
 ```bash
-./run.sh --force-arxiv-download --force-embeddings --force-pdf-download --include-pdf --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
+./run.sh --force-arxiv-download --force-embeddings --include-pdf --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
 ```
 Note: This command assumes a clean slate and will rebuild the entire dataset and embeddings from scratch. It requires significant processing time and disk space.
