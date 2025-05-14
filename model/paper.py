@@ -9,12 +9,14 @@ class PDFCleaner:
     def clean_pdf_content(content: str, title: str, abstract: str) -> str:
         """
         Clean PDF content by removing redundant information and formatting artifacts.
+        Uses a more balanced approach to preserve important content.
         """
         if not content:
             return ""
             
         # Save original content length for comparison
         original_length = len(content)
+        original_content = content  # Store original for possible fallback
             
         # Try to detect scrambled PDF content
         if len(content) > 100:
@@ -29,39 +31,124 @@ class PDFCleaner:
             symbol_count = sum(1 for char in content if char in '{}\\^$&%#@!~*()<>[]|')
             if symbol_count / len(content) > 0.1:  # More than 10% symbols
                 print(f"High density of special symbols in PDF content, may be poorly extracted math")
-                # Try to clean up excessive symbols but keep equation structures
-                content = re.sub(r'[\{\}\\\^\$\&\%\#\@\!\~\*\(\)\<\>\[\]\|]{3,}', ' [EQUATION] ', content)
+                # Try to clean up excessive symbols but preserve important equations
+                content = re.sub(r'[\{\}\\\^\$\&\%\#\@\!\~\*\(\)\<\>\[\]\|]{5,}', ' [EQUATION] ', content)
                 
         # Convert multiple spaces to single space
         content = re.sub(r'\s+', ' ', content)
         
-        # Instead of using regex patterns which can be too aggressive, 
-        # only remove exact matches for title and abstract
-        if title in content:
-            content = content.replace(title, '')
-        if abstract in content:
-            content = content.replace(abstract, '')
+        # Remove exact matches for title and abstract only if they appear more than once
+        # Keep the first occurrence for context
+        if title in content and content.count(title) > 1:
+            first_pos = content.find(title)
+            content_before = content[:first_pos + len(title)]
+            content_after = content[first_pos + len(title):].replace(title, '')
+            content = content_before + content_after
+            
+        if abstract in content and content.count(abstract) > 1:
+            first_pos = content.find(abstract)
+            content_before = content[:first_pos + len(abstract)]
+            content_after = content[first_pos + len(abstract):].replace(abstract, '')
+            content = content_before + content_after
         
-        # Apply less aggressive cleaning
-        content = PDFCleaner._remove_headers_footers(content)
-        content = PDFCleaner._remove_references_section(content)
-        content = PDFCleaner._remove_affiliations_acknowledgments(content)
-        content = PDFCleaner._clean_general_content(content)
+        # Track content length after each cleaning step
+        content_after_basic = content
         
-        cleaned_content = content.strip()
+        # Apply selective cleaning with content preservation checks
+        cleaned_content = content
+        current_length = len(cleaned_content)
         
-        # If cleaning removed more than 90% of content, something went wrong
-        # Use fallback cleaning instead
-        if len(cleaned_content) < 0.1 * original_length:
+        # Apply each cleaning step only if it doesn't remove too much content
+        temp_content = PDFCleaner._remove_headers_footers(cleaned_content)
+        if len(temp_content) >= 0.8 * current_length:
+            cleaned_content = temp_content
+            current_length = len(cleaned_content)
+        
+        temp_content = PDFCleaner._remove_references_section(cleaned_content)
+        if len(temp_content) >= 0.7 * current_length:
+            cleaned_content = temp_content
+            current_length = len(cleaned_content)
+        
+        temp_content = PDFCleaner._remove_affiliations_acknowledgments(cleaned_content)
+        if len(temp_content) >= 0.9 * current_length:
+            cleaned_content = temp_content
+            current_length = len(cleaned_content)
+        
+        temp_content = PDFCleaner._clean_general_content(cleaned_content)
+        if len(temp_content) >= 0.9 * current_length:
+            cleaned_content = temp_content
+        
+        cleaned_content = cleaned_content.strip()
+        
+        # If cleaning removed more than 70% of content (increased threshold), use more conservative approach
+        if len(cleaned_content) < 0.3 * original_length:
             print(f"Warning: Cleaning removed {original_length - len(cleaned_content)} chars ({(original_length - len(cleaned_content))/original_length*100:.1f}% of content)")
-            print(f"Using fallback minimal cleaning instead")
-            cleaned_content = PDFCleaner._fallback_cleaning(content, title, abstract)
+            
+            # Try just the basic cleaning first (more conservative)
+            basic_cleaned = PDFCleaner._basic_cleaning(original_content, title, abstract)
+            
+            if len(basic_cleaned) >= 0.5 * original_length:
+                print(f"Using basic cleaning instead")
+                return basic_cleaned
+            else:
+                print(f"Using fallback minimal cleaning")
+                return PDFCleaner._fallback_cleaning(original_content, title, abstract)
             
         return cleaned_content
         
     @staticmethod
+    def _basic_cleaning(content: str, title: str, abstract: str) -> str:
+        """Apply a moderate level of cleaning - more thorough than fallback but less aggressive than full cleaning."""
+        if not content:
+            return ""
+        
+        # Normalize whitespace first
+        content = re.sub(r'\s+', ' ', content)
+        
+        # Remove only the most common formatting artifacts
+        # Remove page numbers (various formats)
+        content = re.sub(r'\b\d+\s*(?:of|/)\s*\d+\b', '', content)
+        content = re.sub(r'\bpage\s+\d+\b', '', content, flags=re.IGNORECASE)
+        
+        # Remove specific patterns that are very likely to be noise
+        noise_patterns = [
+            r'https?://\S+',  # URLs
+            r'[\w\.-]+@[\w\.-]+\.\w+',  # Email addresses
+            r'(?:Copyright|©)\s*\d{4}[^\n]*',  # Copyright notices
+            r'This work is licensed under[^\n]*',  # License statements
+            r'arXiv:\d{4}\.\d{4,5}v\d+',  # arXiv identifiers
+            r'EUROPEAN ORGANIZATION FOR NUCLEAR RESEARCH',  # Common header
+            r'CERN-\w+',  # CERN document identifiers
+            r'LHCb-\w+'  # LHCb document identifiers
+        ]
+        
+        for pattern in noise_patterns:
+            content = re.sub(pattern, '', content)
+        
+        # Handle title and abstract duplicates
+        if title in content and content.count(title) > 1:
+            first_pos = content.find(title)
+            content_before = content[:first_pos + len(title)]
+            content_after = content[first_pos + len(title):].replace(title, '')
+            content = content_before + content_after
+            
+        if abstract in content and content.count(abstract) > 1:
+            first_pos = content.find(abstract)
+            content_before = content[:first_pos + len(abstract)]
+            content_after = content[first_pos + len(abstract):].replace(abstract, '')
+            content = content_before + content_after
+        
+        # Remove non-printable characters
+        content = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', content)
+        
+        # Normalize newlines
+        content = re.sub(r'\n{3,}', '\n\n', content)
+        
+        return content.strip()
+        
+    @staticmethod
     def _fallback_cleaning(content: str, title: str, abstract: str) -> str:
-        """Apply less aggressive cleaning when standard cleaning yields too little content."""
+        """Apply minimal cleaning when other methods yield too little content."""
         if not content:
             return ""
             
@@ -316,7 +403,6 @@ class Paper:
         self._pdf_content = ""  # Store raw PDF content
         self._cleaned_pdf_content = ""  # Store cleaned PDF content
         
-        # No need to set has_valid_id - it's a property that will be calculated when accessed
         
         # Process PDF content if needed
         if include_pdf and pdf_dir:
@@ -410,7 +496,7 @@ class Paper:
             return False
             
     def _extract_with_pypdf2(self, pdf_path):
-        """Extract text using PyPDF2."""
+        """Extract text using PyPDF2 with improved handling for different PDF quality scenarios."""
         try:
             with open(pdf_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
@@ -418,18 +504,30 @@ class Paper:
                     print(f"PDF file for {self.id} has 0 pages.")
                     return None
                     
-                # Extract text from all pages
+                # Extract text from all pages with error tracking
                 text = ""
-                for page_num in range(len(reader.pages)):
+                error_count = 0
+                total_pages = len(reader.pages)
+                
+                for page_num in range(total_pages):
                     try:
                         page = reader.pages[page_num]
                         page_text = page.extract_text()
                         if page_text:
                             text += page_text + "\n"
+                        else:
+                            error_count += 1
                     except Exception as e:
-                        print(f"Error extracting page {page_num} for {self.id}: {str(e)}")
+                        error_count += 1
+                        # Only log errors for first few pages to avoid excessive logging
+                        if page_num < 3 or page_num > total_pages - 3:
+                            print(f"Error extracting page {page_num} for {self.id}: {str(e)}")
                         continue
                 
+                # If more than 50% of pages failed to extract, log a warning
+                if error_count > total_pages / 2:
+                    print(f"Warning: {error_count}/{total_pages} pages failed to extract properly for {self.id}")
+                    
                 if not text or len(text) < 200:
                     print(f"Failed to extract meaningful text from PDF for {self.id}")
                     return None
@@ -437,23 +535,23 @@ class Paper:
                 # Store raw content before cleaning
                 self._pdf_content = text
                 
-                # Clean the extracted text    
+                # First try basic cleaning (new moderate approach)
+                basic_cleaned = PDFCleaner._basic_cleaning(text, self.title, self.abstract)
+                
+                # If basic cleaning preserves enough content, use it
+                if basic_cleaned and len(basic_cleaned) >= 0.4 * len(text):
+                    return basic_cleaned
+                    
+                # Otherwise try full cleaning process
                 cleaned_text = PDFCleaner.clean_pdf_content(text, self.title, self.abstract)
                 
-                # If cleaned text is too short, use the fallback cleaning
-                if not cleaned_text or len(cleaned_text) < 200:
-                    print(f"Cleaned PDF text for {self.id} is too short, trying fallback cleaning")
-                    cleaned_text = PDFCleaner._fallback_cleaning(text, self.title, self.abstract)
-                    
-                    # If fallback cleaning also produces too little content, use the raw text as a last resort
-                    if not cleaned_text or len(cleaned_text) < 200:
-                        print(f"Fallback cleaning also produced short text, using raw PDF content for {self.id}")
-                        # Just do minimal cleaning on raw text to ensure usability
-                        raw_content = text.replace('\n', ' ')
-                        raw_content = re.sub(r'\s+', ' ', raw_content)
-                        cleaned_text = raw_content[:8000]  # Limit to 8000 chars to avoid too large embeddings
+                # If too much content was removed, the cleaning was probably too aggressive
+                if cleaned_text and len(cleaned_text) >= 200:
+                    return cleaned_text
                 
-                return cleaned_text
+                # If full cleaning produced too little text, use basic cleaning instead
+                print(f"Cleaned text for {self.id} was too short ({len(cleaned_text) if cleaned_text else 0} chars), using basic cleaning")
+                return basic_cleaned if basic_cleaned else PDFCleaner._fallback_cleaning(text, self.title, self.abstract)
                 
         except Exception as e:
             print(f"PyPDF2 extraction error for {self.id}: {str(e)}")
