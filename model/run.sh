@@ -4,6 +4,34 @@ export PYTHONUNBUFFERED=1
 # Exit on error
 set -e
 
+# Function to show help message
+show_help() {
+    echo "LHCbFinder Embedding Pipeline"
+    echo "Available options:"
+    echo "  -h, --help                 Show this help message"
+    echo "  --include-pdf              Include PDF content in embeddings"
+    echo "  --download-pdfs            Download new PDFs"
+    echo "  --force-arxiv-download     Force download of new arXiv metadata"
+    echo "  --force-embeddings         Force reprocessing of all papers"
+    echo "  --force-pdf-download       Force download of all PDFs"
+    echo "  --start-year YEAR          Process papers from this year onwards"
+    echo "  --pdf-dir DIR              Specify PDF directory"
+    echo "  --chunk-mode               Enable chunking of PDF content for better search"
+    echo "  --chunk-size SIZE          Maximum number of words per chunk (default: 500)"
+    echo "  --chunk-overlap OVERLAP    Number of words to overlap between chunks (default: 100)"
+    echo "  --test-mode                Enable test mode to process a small batch of papers"
+    echo "  --limit N                  Limit number of papers to process (default: 10 in test mode)"
+    echo "  --no-confirmation          Skip confirmation prompts"
+    exit 0
+}
+
+# Check for help flags first before showing any startup messages
+for arg in "$@"; do
+    if [ "$arg" = "-h" ] || [ "$arg" = "--help" ]; then
+        show_help
+    fi
+done
+
 echo "Starting pipeline..."
 
 # Load environment variables
@@ -34,8 +62,14 @@ CHUNK_OVERLAP=100
 TEST_MODE=false
 LIMIT=10
 
+
+
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -h|--help)
+            # This is handled earlier, but included here for completeness
+            show_help
+            ;;
         --include-pdf)
             INCLUDE_PDF=true
             shift
@@ -86,19 +120,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Available options:"
-            echo "  --include-pdf              Include PDF content in embeddings"
-            echo "  --download-pdfs            Download new PDFs"
-            echo "  --force-arxiv-download     Force download of new arXiv metadata"
-            echo "  --force-embeddings         Force reprocessing of all papers"
-            echo "  --force-pdf-download       Force download of all PDFs"
-            echo "  --start-year YEAR          Process papers from this year onwards"
-            echo "  --pdf-dir DIR              Specify PDF directory"
-            echo "  --chunk-mode               Enable chunking of PDF content for better search"
-            echo "  --chunk-size SIZE          Maximum number of words per chunk (default: 500)"
-            echo "  --chunk-overlap OVERLAP    Number of words to overlap between chunks (default: 100)"
-            echo "  --test-mode                Enable test mode to process a small batch of papers"
-            echo "  --limit N                  Limit number of papers to process (default: 10 in test mode)" 
+            echo "Use -h or --help to see available options"
             exit 1
             ;;
     esac

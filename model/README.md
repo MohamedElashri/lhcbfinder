@@ -161,15 +161,15 @@ The embedding text focuses on the most semantically relevant content:
 
 ### Metadata Fields
 Each embedding includes these metadata fields:
-- id: The paper ID
-- title: Paper title
-- authors: Authors list (preserved in metadata)
-- year: Publication year
-- abstract: Paper abstract
-- categories: arXiv categories
-- is_chunk: Whether this is a content chunk (when using --chunk-mode)
-- chunk_id: The chunk identifier (when applicable)
-- parent_id: ID of the parent paper (for chunks)
+- `id`: The paper ID
+- `title`: Paper title
+- `authors`: Authors list (preserved in metadata)
+- `year`: Publication year
+- `abstract`: Paper abstract
+- `categories`: arXiv categories
+- `is_chunk`: Whether this is a content chunk (when using --chunk-mode)
+- `chunk_id`: The chunk identifier (when applicable)
+- `parent_id`: ID of the parent paper (for chunks)
 
 ### Refreshing All Data
 To completely refresh all data:
@@ -180,14 +180,31 @@ To completely refresh all data:
 
 ## Available Options
 
+You can display all available options using the help flag:
+
+```bash
+./run.sh --help
+# or
+./run.sh -h
+```
+
+Complete list of available options:
+
 ```bash
 --include-pdf             Include PDF content in embeddings
 --download-pdfs           Download new PDFs
+--pdf-dir DIR             Specify PDF directory (default: lhcb_pdfs)
 --force-arxiv-download    Force download of new arXiv metadata
 --force-embeddings        Force reprocessing of all papers
 --force-pdf-download      Force download of all PDFs
 --start-year YEAR         Process papers from this year onwards
---pdf-dir DIR            Specify PDF directory (default: lhcb_pdfs)
+--no-confirmation         Skip confirmation prompts
+--chunk-mode              Chunk PDF content for more precise search
+--chunk-size SIZE         Maximum words per chunk (default: 500)
+--chunk-overlap OVERLAP   Words to overlap between chunks (default: 100)
+--test-mode               Run in test mode with limited papers (for development purposes)
+--limit COUNT             Limit number of papers to process in test mode (default: 10)
+--help, -h                Show this help message and exit
 ```
 
 ## Output Files
@@ -201,6 +218,6 @@ To completely refresh all data:
 ### lhcbfinder.net Production Setup
 To generate the complete production-ready version as deployed on lhcbfinder.net, use:
 ```bash
-./run.sh --force-arxiv-download --force-embeddings --include-pdf --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
+./run.sh --force-arxiv-download --force-embeddings --include-pdf --force-pdf-download --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
 ```
 Note: This command assumes a clean slate and will rebuild the entire dataset and embeddings from scratch. It requires significant processing time and disk space.
