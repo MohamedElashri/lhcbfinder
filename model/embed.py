@@ -1084,7 +1084,7 @@ def main():
         pass
     
     # Reminder about embedding formatting     
-    print(f"\n{Fore.GREEN} Note: Per your preferences, author information is kept in metadata but excluded from embedding text.")
+    print(f"\n{Fore.GREEN} Note: Author information is kept in metadata but excluded from embedding text.")
     print(f"{Fore.GREEN} The embeddings focus on title, year, abstract, and content chunks for better semantic search.")
     
     
