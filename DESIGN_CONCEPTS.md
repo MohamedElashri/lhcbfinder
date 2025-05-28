@@ -201,20 +201,6 @@ def _extract_with_pypdf2(self, pdf_path):
         return self._extract_with_fallback(pdf_path)
 ```
 
-## Testing Strategy
-
-### 1. Test Types
-
-- **Unit Tests**: For individual functions and classes
-- **Integration Tests**: For component interactions
-- **Functional Tests**: For end-to-end functionality
-
-### 2. Test Organization
-
-- **Test Discovery**: Tests should be discoverable by pytest
-- **Test Isolation**: Each test should be independent
-- **Test Coverage**: Aim for high coverage of critical components
-
 ## Performance Considerations
 
 ### 1. Resource Management
