@@ -497,19 +497,58 @@ class Paper:
             
     def _extract_with_pypdf2(self, pdf_path):
         """Extract text using PyPDF2 with improved handling for different PDF quality scenarios."""
+        import PyPDF2
+        import subprocess
+        import time
+        
         try:
+            # First attempt: Try using the pdftotext utility if available (much more reliable)
+            try:
+                # Try to use pdftotext command (from poppler-utils) if available
+                result = subprocess.run(
+                    ["pdftotext", pdf_path, "-"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=30  # 30-second timeout
+                )
+                
+                if result.returncode == 0 and result.stdout and len(result.stdout) > 100:
+                    return result.stdout
+                else:
+                    print(f"pdftotext failed or returned insufficient content for {self.id}, falling back to PyPDF2")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                # pdftotext not available or failed, continue with PyPDF2
+                pass
+                
+            # Second attempt: Use PyPDF2 with a simple approach and no worker threads
+            # This avoids the file handle issues
+            text = ""
+            error_count = 0
+            
+            # Use a memory buffer with the file contents to avoid file handle issues
             with open(pdf_path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                if len(reader.pages) == 0:
-                    print(f"PDF file for {self.id} has 0 pages.")
+                pdf_data = f.read()
+                
+            try:
+                # Process the PDF from memory to avoid file handle issues
+                import io
+                pdf_file = io.BytesIO(pdf_data)
+                reader = PyPDF2.PdfReader(pdf_file, strict=False)
+                
+                # Get page count with error handling
+                try:
+                    page_count = len(reader.pages)
+                except Exception as e:
+                    print(f"Error accessing page count for {self.id}: {str(e)}")
                     return None
                     
-                # Extract text from all pages with error tracking
-                text = ""
-                error_count = 0
-                total_pages = len(reader.pages)
+                if page_count == 0:
+                    print(f"PDF file for {self.id} has 0 pages.")
+                    return None
                 
-                for page_num in range(total_pages):
+                # Use a simple loop to extract text from each page
+                # No threads, no complex error handling to avoid file handle issues
+                for page_num in range(min(page_count, 100)):  # Limit to 100 pages maximum
                     try:
                         page = reader.pages[page_num]
                         page_text = page.extract_text()
@@ -519,19 +558,15 @@ class Paper:
                             error_count += 1
                     except Exception as e:
                         error_count += 1
-                        # Only log errors for first few pages to avoid excessive logging
-                        if page_num < 3 or page_num > total_pages - 3:
-                            print(f"Error extracting page {page_num} for {self.id}: {str(e)}")
-                        continue
+                        # Only log a few errors to avoid flooding
+                        if error_count < 5:
+                            print(f"Page {page_num} extraction error for {self.id}: {str(e)}")
+            except Exception as e:
+                print(f"PDF extraction error for {self.id}: {str(e)}")
+                return None
                 
-                # If more than 50% of pages failed to extract, log a warning
-                if error_count > total_pages / 2:
-                    print(f"Warning: {error_count}/{total_pages} pages failed to extract properly for {self.id}")
-                    
-                if not text or len(text) < 200:
-                    print(f"Failed to extract meaningful text from PDF for {self.id}")
-                    return None
-                
+            # If we have enough content to use, clean and return it
+            if text and len(text) > 100:
                 # Store raw content before cleaning
                 self._pdf_content = text
                 
@@ -551,10 +586,12 @@ class Paper:
                 
                 # If full cleaning produced too little text, use basic cleaning instead
                 print(f"Cleaned text for {self.id} was too short ({len(cleaned_text) if cleaned_text else 0} chars), using basic cleaning")
-                return basic_cleaned if basic_cleaned else PDFCleaner._fallback_cleaning(text, self.title, self.abstract)
-                
+                return basic_cleaned if basic_cleaned and len(basic_cleaned) >= 100 else None
+            else:
+                print(f"Failed to extract meaningful text from PDF for {self.id} (length: {len(text) if text else 0})")
+                return None
         except Exception as e:
-            print(f"PyPDF2 extraction error for {self.id}: {str(e)}")
+            print(f"Error extracting text from PDF for {self.id}: {str(e)}")
             return None
         
     def _extract_with_fallback(self, pdf_path):

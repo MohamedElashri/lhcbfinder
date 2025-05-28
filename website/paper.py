@@ -12,6 +12,12 @@ class Paper(dict):
         self.abstract = metadata["abstract"]
         self.year = metadata["year"]
         
+        # Set parent_id if this is a chunk
+        if "_chunk_" in self.id:
+            self.parent_id = metadata.get("parent_id", self.id.split("_chunk_")[0])
+        else:
+            self.parent_id = None
+        
         # Convert numeric month to month name
         month_raw = metadata["month"]
         self.month = self._convert_month_to_name(month_raw)
