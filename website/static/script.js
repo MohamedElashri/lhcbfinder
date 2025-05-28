@@ -426,13 +426,13 @@ function addPaper(result) {
         ${chunkNavigation}
         <div class="result_button_container">
             <div class="result_button_flex">
-                <a href="https://arxiv.org/abs/${result.id}" target="_blank">
+                <a href="https://arxiv.org/abs/${result.parent_id || result.id}" target="_blank">
                     <div class="result_button">
                         <div class="go_to_symbol"></div>
                         <p>Go to Paper</p>
                     </div>
                 </a>
-                <a href="/?q=${encodeURIComponent("https://arxiv.org/abs/" + result.id)}" target="_blank">
+                <a href="/?q=${encodeURIComponent("https://arxiv.org/abs/" + (result.parent_id || result.id))}" target="_blank">
                     <div class="result_button">
                         <div class="similarity_symbol"></div>
                         <p>Find Similar</p>
