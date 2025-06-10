@@ -39,10 +39,15 @@ def check_environment():
 def test_check_environment_success(monkeypatch):
     monkeypatch.setenv("PINECONE_API_KEY", "key")
     monkeypatch.setenv("PINECONE_INDEX_NAME", "index")
-    import types, sys
+    import sys
+    from types import ModuleType
+    sentence_transformers_mock = ModuleType("sentence_transformers")
+    sentence_transformers_mock.SentenceTransformer = object
+    pinecone_mock = ModuleType("pinecone")
+    pinecone_mock.Pinecone = object
     with patch.dict(sys.modules, {
-        "sentence_transformers": types.SimpleNamespace(SentenceTransformer=object),
-        "pinecone": types.SimpleNamespace(Pinecone=object)
+        "sentence_transformers": sentence_transformers_mock,
+        "pinecone": pinecone_mock
     }):
         with patch("sentence_transformers.SentenceTransformer") as MockModel, \
              patch("pinecone.Pinecone") as MockPinecone:
