@@ -187,7 +187,7 @@ def parse_arxiv_identifier(query):
     # Extract ID from URL forms
     if validators.url(query):
         query = query.split("/")[-1]
-        if query.endswith(".pdf"):
+        if query.lower().endswith(".pdf"):
             query = query[:-4]
 
     # Drop optional version suffix (e.g. v1, v2)
