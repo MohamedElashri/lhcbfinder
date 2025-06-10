@@ -1,45 +1,94 @@
-# test_setup.py
 import os
-from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
-from pinecone import Pinecone
+import pytest
+from unittest.mock import patch
 
-def test_environment():
-    print("Testing environment setup...")
-    
-    # Test environment variables
+try:
+    from dotenv import load_dotenv  # type: ignore
+except Exception:  # pragma: no cover - fallback when python-dotenv is missing
+    def load_dotenv(path: str = ".env"):
+        if not os.path.exists(path):
+            return
+        with open(path) as f:
+            for line in f:
+                if not line.strip() or line.startswith("#"):
+                    continue
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+
+
+def check_environment():
+    """Validate environment configuration and external services."""
     load_dotenv()
-    required_vars = ['PINECONE_API_KEY', 'PINECONE_INDEX_NAME']
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    
-    if missing_vars:
-        print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-        return False
-    print("✅ Environment variables loaded successfully")
-    
-    # Test Sentence Transformer model
-    try:
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        test_embedding = model.encode(["Test sentence"])
-        print("✅ Sentence Transformer model loaded successfully")
-    except Exception as e:
-        print(f"❌ Error loading Sentence Transformer model: {e}")
-        return False
-    
-    # Test Pinecone connection
-    try:
-        pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-        index = pc.Index(os.getenv('PINECONE_INDEX_NAME'))
-        stats = index.describe_index_stats()
-        print(f"✅ Connected to Pinecone index: {stats['total_vector_count']} vectors found")
-    except Exception as e:
-        print(f"❌ Error connecting to Pinecone: {e}")
-        return False
-    
-    return True
+    required = ["PINECONE_API_KEY", "PINECONE_INDEX_NAME"]
+    missing = [name for name in required if not os.environ.get(name)]
+    assert not missing, f"Missing environment variables: {', '.join(missing)}"
 
-if __name__ == "__main__":
-    if test_environment():
-        print("\n🎉 All systems ready! You can now run the Flask app.")
-    else:
-        print("\n❌ Please fix the errors above before running the Flask app.")
+    from sentence_transformers import SentenceTransformer  # imported lazily
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    embedding = model.encode(["Test sentence"])
+    assert embedding is not None
+
+    from pinecone import Pinecone  # imported lazily
+    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+    index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
+    stats = index.describe_index_stats()
+    assert "total_vector_count" in stats
+
+
+def test_check_environment_success(monkeypatch):
+    monkeypatch.setenv("PINECONE_API_KEY", "key")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "index")
+    import types, sys
+    with patch.dict(sys.modules, {
+        "sentence_transformers": types.SimpleNamespace(SentenceTransformer=object),
+        "pinecone": types.SimpleNamespace(Pinecone=object)
+    }):
+        with patch("sentence_transformers.SentenceTransformer") as MockModel, \
+             patch("pinecone.Pinecone") as MockPinecone:
+            model_inst = MockModel.return_value
+            model_inst.encode.return_value = [0.1]
+            pc_inst = MockPinecone.return_value
+            index_inst = pc_inst.Index.return_value
+            index_inst.describe_index_stats.return_value = {"total_vector_count": 1}
+
+            check_environment()
+
+            model_inst.encode.assert_called_once_with(["Test sentence"])
+            pc_inst.Index.assert_called_once_with("index")
+            index_inst.describe_index_stats.assert_called_once()
+
+
+def test_missing_env_vars(monkeypatch):
+    monkeypatch.delenv("PINECONE_API_KEY", raising=False)
+    monkeypatch.delenv("PINECONE_INDEX_NAME", raising=False)
+    with pytest.raises(AssertionError, match="Missing environment variables"):
+        check_environment()
+
+
+def test_model_exception(monkeypatch):
+    monkeypatch.setenv("PINECONE_API_KEY", "key")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "index")
+    import types, sys
+    with patch.dict(sys.modules, {
+        "sentence_transformers": types.SimpleNamespace(SentenceTransformer=object),
+        "pinecone": types.SimpleNamespace(Pinecone=object)
+    }):
+        with patch("sentence_transformers.SentenceTransformer", side_effect=RuntimeError("model")):
+            with pytest.raises(RuntimeError):
+                check_environment()
+
+
+def test_pinecone_exception(monkeypatch):
+    monkeypatch.setenv("PINECONE_API_KEY", "key")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "index")
+    import types, sys
+    with patch.dict(sys.modules, {
+        "sentence_transformers": types.SimpleNamespace(SentenceTransformer=object),
+        "pinecone": types.SimpleNamespace(Pinecone=object)
+    }):
+        with patch("sentence_transformers.SentenceTransformer") as MockModel:
+            MockModel.return_value.encode.return_value = [0.1]
+            with patch("pinecone.Pinecone", side_effect=RuntimeError("pc")):
+                with pytest.raises(RuntimeError):
+                    check_environment()
