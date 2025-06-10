@@ -27,9 +27,8 @@ logging.info(
 )
 
 if os.path.exists(EMBEDDING_FILE_PATH):
-    num_kaggle = sum(
-        1 for _ in open(EMBEDDING_FILE_PATH, "r", encoding="utf-8")
-    )
+    with open(EMBEDDING_FILE_PATH, "r", encoding="utf-8") as f:
+        num_kaggle = sum(1 for _ in f)
 else:
     num_kaggle = 0
     logging.info("No existing embeddings file. Starting fresh.")
