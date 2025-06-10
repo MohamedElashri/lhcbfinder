@@ -126,4 +126,4 @@ A lot of work on quality and improving the embeddings and the search results. I 
 This work is a fork of [searchthearxiv](https://github.com/augustwester/searchthearxiv) project that provides a semantic search for Machine Leaning arxiv papers. I used the code and the idea to create a similar project for LHCb papers.
 
 ## License
-This project is licensed under the GPLv3 License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the GPLv3 License - see the [LICENSE](LICENSE) file for details.
