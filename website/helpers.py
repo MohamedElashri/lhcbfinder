@@ -191,10 +191,7 @@ def parse_arxiv_identifier(query):
             query = query[:-4]
 
     # Drop optional version suffix (e.g. v1, v2)
-    if "v" in query:
-        base, version = query.split("v", 1)
-        if version.isdigit():
-            query = base
+    query = re.sub(r'v\d+$', '', query)
 
     # Old style IDs with category prefix (e.g. hep-ex/9909055)
     if "/" in query:
