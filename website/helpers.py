@@ -164,21 +164,49 @@ def error(msg):
     return json.dumps({"error": msg})
 
 def parse_arxiv_identifier(query):
-    """Parse different forms of arXiv identifiers."""
-    # Remove any whitespace
+    """Parse different forms of arXiv identifiers.
+
+    The original implementation only handled bare identifiers like
+    ``2409.03496`` or URLs pointing to the arXiv page.  It failed when a
+    version suffix (e.g. ``v1``) or the ``arXiv:`` prefix was present.
+    This caused valid identifiers such as ``arXiv:2409.03496v1`` or
+    ``https://arxiv.org/abs/2409.03496v2`` to be treated as free text
+    queries.  The search endpoint would then incorrectly embed these
+    strings instead of fetching the paper directly.
+
+    The new logic normalises common forms of arXiv IDs by stripping
+    prefixes, handling version components and supporting the older
+    ``category/number`` notation.
+    """
+
+    # Remove whitespace and ``arXiv:`` prefix
     query = query.strip()
-    
-    # Full URL pattern
+    if query.lower().startswith("arxiv:"):
+        query = query[6:]
+
+    # Extract ID from URL forms
     if validators.url(query):
-        return query.split("/")[-1]
-    
-    # Just the ID pattern (e.g., 2409.03496)
-    if len(query.split(".")) == 2:
-        try:
-            year, number = query.split(".")
-            if len(year) == 4 and year.isdigit() and number.isdigit():
-                return query
-        except ValueError:
-            pass
-    
+        query = query.split("/")[-1]
+        if query.endswith(".pdf"):
+            query = query[:-4]
+
+    # Drop optional version suffix (e.g. v1, v2)
+    if "v" in query:
+        base, version = query.split("v", 1)
+        if version.isdigit():
+            query = base
+
+    # Old style IDs with category prefix (e.g. hep-ex/9909055)
+    if "/" in query:
+        prefix, number = query.split("/", 1)
+        if prefix and number and number.isdigit():
+            return f"{prefix}/{number}"
+
+    # New style IDs ``YYYY.NNNNN``
+    parts = query.split(".")
+    if len(parts) == 2:
+        year, number = parts
+        if len(year) == 4 and year.isdigit() and number.isdigit():
+            return f"{year}.{number}"
+
     return None
