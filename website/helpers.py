@@ -182,7 +182,7 @@ def parse_arxiv_identifier(query):
     # Remove whitespace and ``arXiv:`` prefix
     query = query.strip()
     if query.lower().startswith("arxiv:"):
-        query = query[6:]
+        query = query[len("arxiv:"):]
 
     # Extract ID from URL forms
     if validators.url(query):
