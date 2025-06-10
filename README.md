@@ -12,7 +12,7 @@ There are two main parts of this project:
 
 ## model
 
-The code inside the `model` folder is responsible for creating the embeddings for the papers. It scrapes the arxiv papers dataset on kaggle and uses sentence transformers to encode the papers. The embeddings are saved in a file and used in the search part. I also use `Pinecode` to create the embeddings for the papers.
+The code inside the `model` folder is responsible for creating the embeddings for the papers. It scrapes the arxiv papers dataset on kaggle and uses sentence transformers to encode the papers. The embeddings are saved in a file and used in the search part. I also use `Pinecone` to create the embeddings for the papers.
 
 ## website 
 
