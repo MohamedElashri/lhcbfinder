@@ -52,6 +52,16 @@ $(window).bind("load", function () {
         }
     });
 
+    // Make example items clickable
+    $(".example-item").click(function() {
+        const exampleText = $(this).find(".example-text").text();
+        // Remove quotes from the example text
+        const cleanText = exampleText.replace(/['"]/g, '');
+        $("#query_field").val(cleanText);
+        $("#query_field").trigger("input"); // trigger resize
+        performSearch();
+    });
+
     // Initialize theme
     initializeTheme();
 
