@@ -320,17 +320,29 @@ p, a {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+    cursor: pointer;
 }
 
 .example-item:hover {
     box-shadow: 0 2px 8px rgba(0, 51, 160, 0.15);
     transform: translateY(-2px);
     border-color: var(--cern-blue);
+    background-color: rgba(0, 51, 160, 0.03);
 }
 
 [data-theme="dark"] .example-item:hover {
     box-shadow: 0 2px 8px rgba(189, 147, 249, 0.3);
     border-color: #bd93f9;
+    background-color: rgba(189, 147, 249, 0.05);
+}
+
+.example-item:active {
+    transform: translateY(0px);
+    box-shadow: 0 1px 4px rgba(0, 51, 160, 0.2);
+}
+
+[data-theme="dark"] .example-item:active {
+    box-shadow: 0 1px 4px rgba(189, 147, 249, 0.4);
 }
 
 .example-type {
