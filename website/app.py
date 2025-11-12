@@ -92,12 +92,16 @@ def search():
     # Check if query is an arXiv identifier
     arxiv_id = parse_arxiv_identifier(query)
     if arxiv_id:
-        matches = index.fetch([arxiv_id])["vectors"]
-        if len(matches) == 0:
-            abstract = fetch_abstract(f"https://arxiv.org/abs/{arxiv_id}")
-            embed = model.encode([abstract])[0].tolist()
-            return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
-        return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
+        try:
+            matches = index.fetch([arxiv_id])["vectors"]
+            if len(matches) == 0:
+                abstract = fetch_abstract(f"https://arxiv.org/abs/{arxiv_id}")
+                embed = model.encode([abstract])[0].tolist()
+                return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
+            return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
+        except Exception as e:
+            print(f"Error processing arXiv ID {arxiv_id}: {e}", flush=True)
+            return error(f"Could not process arXiv paper {arxiv_id}. Please verify the ID is correct.")
 
     # Clean and validate query
     clean_query = query_processor.clean_query(query)
