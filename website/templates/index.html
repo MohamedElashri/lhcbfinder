@@ -100,7 +100,22 @@
             </div>
         </div>
     
-        <p id="tip">Insert an arXiv link or ID to find similar LHCb papers, or use natural language to describe what you are looking for.</p>
+        <p id="tip">Use natural language to describe what papers you are looking for. You can also insert an arXiv link or arXiv ID to find similar LHCb papers.</p>
+    
+    <div id="examples">
+        <p class="example-label">Examples:</p>
+        <div class="example-item">
+            <strong>Natural language:</strong> <span class="example-text">"CP violation in B meson decays"</span>
+        </div>
+        <div class="example-item">
+            <strong>arXiv link:</strong> <span class="example-text">"https://arxiv.org/abs/2511.02619v1"</span>
+        </div>
+        <div class="example-item">
+            <strong>arXiv ID:</strong> <span class="example-text">"2511.02619v1"</span>
+        </div>
+    </div>
+    
+    <p id="about-link">For more information, visit the <a href="/about">about</a> page.</p>
     
         <div id="loading_container" style="display: none;">
             <span class="dot"></span>
@@ -111,7 +126,7 @@
         <div id="container">
             <form id="search_form" onsubmit="performSearch(); return false;">
                 <textarea id="query_field" class="placeholder_hidden" name="query" autocapitalize="off" 
-                    placeholder='Try "CP violation" or "2409.03496"'></textarea>
+                    placeholder='Try "CP violation", "https://arxiv.org/abs/2511.02619v1", or "2511.02619v1"'></textarea>
                 <button id="search_button" type="submit">Search</button>
             </form>
     

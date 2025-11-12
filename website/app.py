@@ -93,14 +93,28 @@ def search():
     arxiv_id = parse_arxiv_identifier(query)
     if arxiv_id:
         try:
-            matches = index.fetch([arxiv_id])["vectors"]
+            print(f"Processing arXiv ID: {arxiv_id}", flush=True)
+            # Try to fetch from index
+            fetch_result = index.fetch([arxiv_id])
+            print(f"Fetch result: {fetch_result}", flush=True)
+            matches = fetch_result.vectors if hasattr(fetch_result, 'vectors') else {}
+            print(f"Number of matches found in index: {len(matches)}", flush=True)
+            
             if len(matches) == 0:
+                # Paper not in database, fetch abstract from arXiv
+                print(f"Paper not in database. Fetching abstract from arXiv...", flush=True)
                 abstract = fetch_abstract(f"https://arxiv.org/abs/{arxiv_id}")
+                print(f"Abstract fetched successfully. Length: {len(abstract)}", flush=True)
                 embed = model.encode([abstract])[0].tolist()
+                print(f"Embedding created. Searching for similar papers...", flush=True)
                 return get_matches_initial(index, K, vector=embed, exclude=arxiv_id)
+            
+            print(f"Paper found in database. Returning similar papers...", flush=True)
             return get_matches_initial(index, K, id=arxiv_id, exclude=arxiv_id)
         except Exception as e:
+            import traceback
             print(f"Error processing arXiv ID {arxiv_id}: {e}", flush=True)
+            print(f"Traceback: {traceback.format_exc()}", flush=True)
             return error(f"Could not process arXiv paper {arxiv_id}. Please verify the ID is correct.")
 
     # Clean and validate query
