@@ -207,11 +207,10 @@ p, a {
     max-width: 830px;
     width: 80%;
     margin: 0 auto;
-    margin-top: 75px;
-    margin-bottom: 80px;
+    margin-top: 20px;
+    margin-bottom: 40px;
     width: clamp(280px, 90%, 830px);
-    padding: calc(20px + var(--safe-area-inset-top)) 16px calc(var(--footer-height) + var(--safe-area-inset-bottom)) 16px;
-    min-height: calc(100vh - var(--header-height) - var(--footer-height));
+    padding: calc(10px + var(--safe-area-inset-top)) 16px 20px 16px;
 }
 
 @keyframes change_color {
@@ -945,8 +944,8 @@ p, a {
 
 .footer {
     text-align: center;
-    padding: 1.5rem;
-    margin-top: 2rem;
+    padding: 1rem;
+    margin-top: 0.5rem;
     border-top: 1px solid var(--border-color);
     color: var(--text-color-secondary);
 }
@@ -989,7 +988,7 @@ p, a {
 
     #container {
         width: 95%;
-        margin-top: 2rem;
+        margin-top: 1rem;
     }
 
     #query_field {
@@ -1283,7 +1282,7 @@ p, a {
     align-items: center;
     flex-direction: column;
     gap: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
 }
 
 #search_button {
