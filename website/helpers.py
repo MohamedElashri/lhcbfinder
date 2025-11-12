@@ -163,44 +163,22 @@ def get_authors(papers):
 def error(msg):
     return json.dumps({"error": msg})
 
-def parse_arxiv_identifier(query: str) -> str | None:
-    """
-    Parse different forms of arXiv identifiers.
-    
-    Handles:
-    - Full URLs: https://arxiv.org/abs/2511.02619v1
-    - IDs with version: 2511.02619v1
-    - IDs without version: 2511.02619
-    
-    Args:
-        query: The input string to parse
-        
-    Returns:
-        The arXiv ID if valid, None otherwise
-    """
-    import re
-    
+def parse_arxiv_identifier(query):
+    """Parse different forms of arXiv identifiers."""
     # Remove any whitespace
     query = query.strip()
     
-    # Full URL pattern - extract the ID from the URL
+    # Full URL pattern
     if validators.url(query):
-        arxiv_id = query.split("/")[-1]
-    else:
-        arxiv_id = query
+        return query.split("/")[-1]
     
-    # arXiv ID pattern: YYMM.NNNNN or YYMM.NNNNNvN (with optional version)
-    # Modern format (post-2007): YYMM.NNNNN[vN]
-    pattern = r'^(\d{4})\.(\d{4,5})(v\d+)?$'
-    match = re.match(pattern, arxiv_id)
-    
-    if match:
-        year, number, version = match.groups()
-        # Validate year is reasonable (arXiv started in 1991, format YYMM)
-        year_num = int(year[:2])
-        month_num = int(year[2:])
-        if 91 <= year_num <= 99 or 0 <= year_num <= 50:  # 1991-1999 or 2000-2050
-            if 1 <= month_num <= 12:  # Valid month
-                return arxiv_id  # Return the full ID including version if present
+    # Just the ID pattern (e.g., 2409.03496)
+    if len(query.split(".")) == 2:
+        try:
+            year, number = query.split(".")
+            if len(year) == 4 and year.isdigit() and number.isdigit():
+                return query
+        except ValueError:
+            pass
     
     return None
