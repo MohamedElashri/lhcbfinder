@@ -5,18 +5,19 @@ import logging
 from dataset import ArxivDownloader, AdaptiveRateLimiter
 import re
 
-def load_metadata(metadata_file='lhcb_papers.json'):
+def load_metadata(output_dir='output', metadata_file='lhcb_papers.json'):
     """Load the LHCb papers metadata."""
+    metadata_path = Path(output_dir) / metadata_file
     try:
-        with open(metadata_file, 'r') as f:
+        with open(metadata_path, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        logging.error(f"Metadata file {metadata_file} not found!")
+        logging.error(f"Metadata file {metadata_path} not found!")
         return []
 
-def get_downloaded_pdfs(pdf_dir='lhcb_pdfs'):
+def get_downloaded_pdfs(output_dir='output', pdf_subdir='lhcb_pdfs'):
     """Get list of downloaded PDFs, handling different ID formats."""
-    pdf_dir = Path(pdf_dir)
+    pdf_dir = Path(output_dir) / pdf_subdir
     if not pdf_dir.exists():
         return set()
     
@@ -29,12 +30,13 @@ def get_downloaded_pdfs(pdf_dir='lhcb_pdfs'):
     
     return pdfs
 
-def parse_log_for_404s(log_file='arxiv_download.log'):
+def parse_log_for_404s(output_dir='output', log_file='arxiv_download.log'):
     """Parse the log file to find papers that returned 404."""
     removed_papers = set()
+    log_path = Path(output_dir) / log_file
     
     try:
-        with open(log_file, 'r') as f:
+        with open(log_path, 'r') as f:
             for line in f:
                 if '404' in line and 'likely removed or retracted' in line:
                     # Extract paper ID using regex
@@ -42,32 +44,34 @@ def parse_log_for_404s(log_file='arxiv_download.log'):
                     if match:
                         removed_papers.add(match.group(1))
     except FileNotFoundError:
-        logging.warning(f"Log file {log_file} not found!")
+        logging.warning(f"Log file {log_path} not found!")
     
     return removed_papers
 
-def check_removed_papers_json(json_file='removed_papers.json'):
+def check_removed_papers_json(output_dir='output', json_file='removed_papers.json'):
     """Check the removed_papers.json file if it exists."""
+    json_path = Path(output_dir) / json_file
     try:
-        with open(json_file, 'r') as f:
+        with open(json_path, 'r') as f:
             return set(json.load(f))
     except FileNotFoundError:
         return set()
 
-def download_missing_papers(missing_papers, output_dir='lhcb_pdfs', html_dir='lhcb_html'):
+def download_missing_papers(missing_papers, output_base_dir='output'):
     """Download missing papers using ArxivDownloader with immediate PDF fallback."""
     # Create paper objects in the format expected by ArxivDownloader
     papers_to_download = [{'id': paper_id} for paper_id in missing_papers]
     
     # Initialize the downloader
     rate_limiter = AdaptiveRateLimiter(initial_delay=5.0, max_delay=300.0)
-    downloader = ArxivDownloader(rate_limiter=rate_limiter)
+    output_base = Path(output_base_dir)
+    downloader = ArxivDownloader(rate_limiter=rate_limiter, data_dir=output_base)
     
-    # Ensure output directories exist
-    output_dir = Path(output_dir)
-    output_dir.mkdir(exist_ok=True)
-    html_dir = Path(html_dir)
-    html_dir.mkdir(exist_ok=True)
+    # Ensure output directories exist under output_base_dir
+    html_dir = output_base / 'lhcb_html'
+    pdf_dir = output_base / 'lhcb_pdfs'
+    html_dir.mkdir(parents=True, exist_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"\nAttempting to download {len(papers_to_download)} missing papers (HTML with PDF fallback)...")
     
@@ -75,7 +79,7 @@ def download_missing_papers(missing_papers, output_dir='lhcb_pdfs', html_dir='lh
     successful_html, successful_pdf, failed = downloader.process_with_fallback(
         papers_to_download,
         html_dir,
-        output_dir,
+        pdf_dir,
         batch_size=10
     )
     
@@ -88,8 +92,11 @@ def main():
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
+    # Default output directory
+    output_dir = 'output'
+
     # Load metadata
-    papers = load_metadata()
+    papers = load_metadata(output_dir=output_dir)
     if not papers:
         return
     
@@ -97,11 +104,11 @@ def main():
     paper_ids = {paper['id'] for paper in papers}
     
     # Get downloaded PDFs
-    downloaded_pdfs = get_downloaded_pdfs()
+    downloaded_pdfs = get_downloaded_pdfs(output_dir=output_dir)
     
     # Get removed papers from both log and json
-    removed_papers_log = parse_log_for_404s()
-    removed_papers_json = check_removed_papers_json()
+    removed_papers_log = parse_log_for_404s(output_dir=output_dir)
+    removed_papers_json = check_removed_papers_json(output_dir=output_dir)
     removed_papers = removed_papers_log | removed_papers_json  # Union of both sets
     
     # Find missing papers (excluding removed ones)
@@ -129,7 +136,7 @@ def main():
         
         response = input("\nWould you like to download missing papers now? (y/n): ")
         if response.lower() == 'y':
-            successful, failed = download_missing_papers(missing_papers)
+            successful, failed = download_missing_papers(missing_papers, output_base_dir=output_dir)
             
             print("\nDownload Results:")
             print(f"Successfully downloaded: {len(successful)}")
