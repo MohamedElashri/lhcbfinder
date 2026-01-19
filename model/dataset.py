@@ -105,6 +105,8 @@ class ArxivDownloader:
             url_prefix = "https://arxiv.org/html"
             # For HTML, ArXiv typically serves a folder structure or a single page.
             # The new ArXiv HTML standard: https://arxiv.org/html/2312.12345
+            # But this is not available for old papers - We later fallback to PDF if HTML not found.
+            # One can just hope that one day all papers will get HTML versions.
         else:
             extension = ".pdf"
             url_prefix = "https://arxiv.org/pdf"
@@ -178,7 +180,7 @@ class ArxivDownloader:
                 if response.status_code == 404:
                     if format == "html":
                         logging.debug(f"HTML Content for {paper_id} not found (404).")
-                        # Don't add to removed_papers purely on HTML 404, might just be PDF-only paper
+                        # Don't add to removed_papers purely on HTML 404, it might just be PDF-only paper
                         return False
                     else:
                         logging.debug(f"Paper {paper_id} not found (404)")
@@ -409,7 +411,9 @@ def download_arxiv_metadata():
             dataset="Cornell-University/arxiv", file_name=metadata_file, path="."
         )
         return metadata_file
-
+        
+    # NOTE: We do this here to avoid hammering arxiv API with many requests checking for new papers
+    # And we want to keep the metadata download separate from the paper download logic for clarity. 
     except Exception as e:
         error_msg = (
             f"Failed to download metadata from Kaggle: {e}\n"

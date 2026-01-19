@@ -44,6 +44,11 @@ def load_data(
             try:
                 data_dict = json.loads(line)
 
+
+            # The following "lhcb" papers filtering logic is probably is the most stupid logic here 
+            # But it's done this way to avoid loading all papers into memory first, which is infeasible for large datasets.
+            # And it surprisingly works well enough for our use case.  
+            # TODO: Any improvements are welcome.   
                 # Check if paper is related to LHCb
                 title = data_dict.get("title", "").lower()
                 abstract = data_dict.get("abstract", "").lower()

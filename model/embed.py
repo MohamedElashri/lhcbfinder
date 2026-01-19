@@ -105,8 +105,7 @@ def create_and_store_embeddings(
     print(f"{Fore.YELLOW} Loading model: {Fore.WHITE}{model_name}")
     model = SentenceTransformer(model_name)
 
-    # Initialize ChromaDB Collections
-    # Initialize ChromaDB client
+    # Initialize ChromaDB Collections and client
     print(f"{Fore.CYAN} Initializing ChromaDB client...")
     db_path = str(Path(output_dir) / "chroma_db")
     chroma_client = chromadb.PersistentClient(path=db_path)
@@ -534,7 +533,7 @@ def main():
     print(f"{Fore.YELLOW} Checking for existing embeddings...")
     # NOTE: Chroma DB handles duplicates if IDs match, but we can verify counts.
     # We can skip complex checking for now and let Chroma upsert handle updates.
-    # Or implement a simple check function later.
+    # TODO: implement a simple check function later.
     papers_to_process = lhcb_papers
     is_new_index = (
         True  # Assume we want to process everything or rely on Chroma's upsert
@@ -542,6 +541,7 @@ def main():
 
     # Optional: logic to skip if already in DB (not implemented for Chroma yet in this script,
     # relying on upsert efficiency or user using --force-embeddings)
+    # TODO: Implement check_existing_embeddings function later.
 
     papers_to_process_ratio = (
         len(papers_to_process) / len(lhcb_papers) * 100 if lhcb_papers else 0

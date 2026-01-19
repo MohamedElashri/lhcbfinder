@@ -54,10 +54,12 @@ Downloads HTML/PDFs and creates embeddings:
 *Note: `--download-content` attempts to download HTML first, then falls back to PDF if HTML is unavailable.*
 
 ### 2. Time-Based Filtering
-Process only recent papers (e.g., fro 2024 onwards):
+Process only recent papers (e.g., fro 2025 onwards):
 ```bash
-./run.sh --start-year 2024 --download-content
+./run.sh --start-year 2025 --download-content
 ```
+
+These papers from 2025 onwards will probably have HTML versions available for all of them. Older papers may still require PDF fallback.
 
 ### 3. Force Refresh
 To re-download and re-embed everything:
