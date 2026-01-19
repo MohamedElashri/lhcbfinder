@@ -32,8 +32,6 @@ def download_new_content(
         rate_limiter=rate_limiter, data_dir=output_dir if output_dir else "."
     )
 
-    Path(html_dir).mkdir(exist_ok=True)
-    Path(pdf_dir).mkdir(exist_ok=True)
     parents_map = {paper.id: paper for paper in papers}
 
     # Filter papers that need downloading if not forcing
