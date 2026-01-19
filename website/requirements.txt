@@ -1,5 +1,5 @@
 flask
-pinecone
+chromadb
 sentence-transformers
 python-dotenv
 flask-limiter
@@ -9,4 +9,3 @@ beautifulsoup4
 requests
 diskcache
 gunicorn
-validators

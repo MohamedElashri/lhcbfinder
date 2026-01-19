@@ -9,12 +9,13 @@ show_help() {
     echo "LHCbFinder Embedding Pipeline"
     echo "Available options:"
     echo "  -h, --help                 Show this help message"
-    echo "  --include-pdf              Include PDF content in embeddings"
-    echo "  --download-pdfs            Download new PDFs"
-    echo "  --force-arxiv-download     Force download of new arXiv metadata"
+    echo "  --download-content         Download content (HTML w/ PDF fallback)"
+    echo "  --force-metadata           Force download of new arXiv metadata"
     echo "  --force-embeddings         Force reprocessing of all papers"
-    echo "  --force-pdf-download       Force download of all PDFs"
+    echo "  --force-content            Force download of content (HTML/PDF)"
+    echo "  --output-dir DIR           Directory to store all output files (default: output)"
     echo "  --start-year YEAR          Process papers from this year onwards"
+    echo "  --html-dir DIR             Specify HTML directory"
     echo "  --pdf-dir DIR              Specify PDF directory"
     echo "  --chunk-mode               Enable chunking of PDF content for better search"
     echo "  --chunk-size SIZE          Maximum number of words per chunk (default: 500)"
@@ -33,6 +34,8 @@ for arg in "$@"; do
 done
 
 echo "Starting pipeline..."
+# Change to the directory of this script to ensure relative paths work
+cd "$(dirname "$0")"
 
 # Load environment variables
 if [ -f .env ]; then
@@ -41,21 +44,18 @@ if [ -f .env ]; then
     source .env
     set +a
 else
-    echo "Error: .env file not found"
-    echo "Please create a .env file with the following variables:"
-    echo "PINECONE_API_KEY=your_api_key"
-    echo "PINECONE_INDEX_NAME=your_index_name"
-    exit 1
+    echo "No .env file found (using defaults or environment variables)"
 fi
 
 # Parse command line arguments
-INCLUDE_PDF=false
-DOWNLOAD_PDFS=false
-FORCE_ARXIV=false
+DOWNLOAD_CONTENT=false
+FORCE_METADATA=false
 FORCE_EMBEDDINGS=false
-FORCE_PDF=false
+FORCE_CONTENT=false
+OUTPUT_DIR="output"
 START_YEAR=""
 PDF_DIR="lhcb_pdfs"
+HTML_DIR="lhcb_html"
 CHUNK_MODE=false
 CHUNK_SIZE=500
 CHUNK_OVERLAP=100
@@ -70,32 +70,37 @@ while [[ $# -gt 0 ]]; do
             # This is handled earlier, but included here for completeness
             show_help
             ;;
-        --include-pdf)
-            INCLUDE_PDF=true
+        --download-content)
+            DOWNLOAD_CONTENT=true
             shift
             ;;
-        --download-pdfs)
-            DOWNLOAD_PDFS=true
-            shift
-            ;;
-        --force-arxiv-download)
-            FORCE_ARXIV=true
+        --force-metadata)
+            FORCE_METADATA=true
             shift
             ;;
         --force-embeddings)
             FORCE_EMBEDDINGS=true
             shift
             ;;
-        --force-pdf-download)
-            FORCE_PDF=true
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --force-content)
+            FORCE_CONTENT=true
             shift
             ;;
+
         --start-year)
             START_YEAR="$2"
             shift 2
             ;;
         --pdf-dir)
             PDF_DIR="$2"
+            shift 2
+            ;;
+        --html-dir)
+            HTML_DIR="$2"
             shift 2
             ;;
         --chunk-mode)
@@ -118,6 +123,10 @@ while [[ $# -gt 0 ]]; do
             LIMIT="$2"
             shift 2
             ;;
+        --no-confirmation)
+            # Handled automatically, just consume arg
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Use -h or --help to see available options"
@@ -126,22 +135,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Create PDF directory if it doesn't exist
-if [ "$INCLUDE_PDF" = true ] || [ "$DOWNLOAD_PDFS" = true ]; then
+# Create directories if needed
+if [ "$DOWNLOAD_CONTENT" = true ]; then
     if [ ! -d "$PDF_DIR" ]; then
         echo "Creating PDF directory: $PDF_DIR"
         mkdir -p "$PDF_DIR"
+    fi
+     if [ ! -d "$HTML_DIR" ]; then
+        echo "Creating HTML directory: $HTML_DIR"
+        mkdir -p "$HTML_DIR"
     fi
 fi
 
 # Show configuration
 echo "Running with configuration:"
+echo "- Python Env: $PYTHON_PATH"
+echo "- Output Directory: $OUTPUT_DIR"
+echo "- HTML Directory: $HTML_DIR"
 echo "- PDF Directory: $PDF_DIR"
-echo "- Include PDF content: $INCLUDE_PDF"
-echo "- Download PDFs: $DOWNLOAD_PDFS"
-echo "- Force arXiv download: $FORCE_ARXIV"
+echo "- Download Content: $DOWNLOAD_CONTENT"
+echo "- Force metadata: $FORCE_METADATA"
 echo "- Force embeddings: $FORCE_EMBEDDINGS"
-echo "- Force PDF download: $FORCE_PDF"
+echo "- Force content: $FORCE_CONTENT"
 echo "- Start Year: $START_YEAR"
 echo "- Chunk mode: $CHUNK_MODE"
 if [ "$CHUNK_MODE" = true ]; then
@@ -154,32 +169,44 @@ if [ "$TEST_MODE" = true ]; then
 fi
 echo
 
+# Determine Python Interpreter
+# Check for .venv in root or current dir
+if [ -f "../.venv/bin/python" ]; then
+    PYTHON_PATH="../.venv/bin/python"
+elif [ -f ".venv/bin/python" ]; then
+    PYTHON_PATH=".venv/bin/python"
+elif [ -f "venv/bin/python" ]; then
+    PYTHON_PATH="venv/bin/python"
+elif [ ! -z "$VIRTUAL_ENV" ]; then
+     PYTHON_PATH="python" # Already activated
+else
+    PYTHON_PATH="python3"
+fi
+
 # Build command string
-CMD="python3 -u embed.py --no-confirmation --pdf-dir \"$PDF_DIR\""
+CMD="$PYTHON_PATH -u embed.py --no-confirmation --output-dir \"$OUTPUT_DIR\" --pdf-dir \"$PDF_DIR\" --html-dir \"$HTML_DIR\""
 
 if [ ! -z "$START_YEAR" ]; then
     CMD="$CMD --start-year $START_YEAR"
 fi
 
-if $INCLUDE_PDF; then
-    CMD="$CMD --include-pdf"
+if $DOWNLOAD_CONTENT; then
+    CMD="$CMD --download-content"
 fi
 
-if $DOWNLOAD_PDFS; then
-    CMD="$CMD --download-pdfs"
-fi
-
-if $FORCE_ARXIV; then
-    CMD="$CMD --force-arxiv-download"
+if $FORCE_METADATA; then
+    CMD="$CMD --force-metadata"
 fi
 
 if $FORCE_EMBEDDINGS; then
     CMD="$CMD --force-embeddings"
 fi
 
-if $FORCE_PDF; then
-    CMD="$CMD --force-pdf-download"
+if $FORCE_CONTENT; then
+    CMD="$CMD --force-content"
 fi
+
+
 
 if $CHUNK_MODE; then
     CMD="$CMD --chunk-mode --chunk-size $CHUNK_SIZE --chunk-overlap $CHUNK_OVERLAP"

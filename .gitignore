@@ -29,6 +29,12 @@ data
 ## test scripts 
 **test**
 
+## html
+lhcb_html
+
+## chromadb
+chroma_db
+
 
 
 

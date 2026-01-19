@@ -1,223 +1,92 @@
 # LHCb Papers Embedding Pipeline
 
-This pipeline creates vector embeddings for LHCb papers from the arXiv dataset, with optional PDF content inclusion for improved search results.
+This pipeline ingests LHCb papers from arXiv, processes them (prioritizing HTML content with PDF processing fallback), and creates vector embeddings stored in a local **ChromaDB** instance.
+
+## Features
+- **Dual Content Source**: Attempts to download high-quality HTML from arXiv. If unavailable (e.g., 404), falls back to PDF processing.
+- **Weighted Embeddings**: Generates separate embeddings for:
+  - **Abstracts**: For broad semantic matching (60% weight).
+  - **Content Chunks**: For precise detail matching (40% weight).
+- **Vector Database**: Uses **ChromaDB** (local persistence) for storing and querying embeddings.
+
+## Command Line Flags
+The `embed.py` script and `run.sh` wrapper support the following flags:
+- **--download-content**: Download content (HTML with PDF fallback) for filtered papers (Recommended).
+- **--force-metadata**: Force re-download of the arXiv metadata file from Kaggle.
+- **--force-content**: Force re-download of content (HTML/PDF) even if files exist.
+- **--force-embeddings**: Force regeneration of embeddings even if they exist.
+- **--start-year YYYY**: Process papers published from the specified year onwards.
+- **--test-mode**: Enable test mode, processing a small, fixed number of papers.
+- **--limit N**: Limit the number of papers processed (useful with `--test-mode`).
+- **--output-dir**: Base directory for all output (HTML, PDFs, DB, logs).
 
 ## Prerequisites
 
-1. Environment Setup
-```bash
-# Create and edit .env file with your credentials
-touch .env
+1.  **Environment Setup**
+    Ensure you are using **Python 3.11** (recommended to avoid dependency issues with `onnxruntime` on newer Python versions).
 
-# Add these variables to .env:
-PINECONE_API_KEY=your_pinecone_key
-PINECONE_INDEX_NAME=your_pinecone_index
-KAGGLE_USERNAME=your_kaggle_username
-KAGGLE_KEY=your_kaggle_api_key
+    ```bash
+    # Create valid (.env) file
+    touch .env
+    
+    # Add optional configuration (if needed)
+    # CHROMA_DB_PATH=chroma_db
+    
+    # KAGGLE Credentials (Required for automatic dataset download)
+    # KAGGLE_USERNAME=your_username
+    # KAGGLE_KEY=your_key
+    ```
+
+2.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Usage
+
+The pipeline is controlled via `run.sh` or directly via `python embed.py`.
+
+### 1. Standard Ingestion (Recommended)
+Downloads HTML/PDFs and creates embeddings:
+```bash
+./run.sh --download-content
+```
+*Note: `--download-content` attempts to download HTML first, then falls back to PDF if HTML is unavailable.*
+
+### 2. Time-Based Filtering
+Process only recent papers (e.g., fro 2024 onwards):
+```bash
+./run.sh --start-year 2024 --download-content
 ```
 
-2. Install Dependencies
+### 3. Force Refresh
+To re-download and re-embed everything:
 ```bash
-pip install -r requirements.txt
+./run.sh --force-embeddings --force-content --download-content
+```
+*(`--force-content` re-fetches content for all papers).*
 
-# For enhanced progress visualization (optional but recommended)
-pip install colorama psutil yaspin
+### 4. Test Mode (Development)
+Process a small subset (e.g., 5 papers) to verify setup:
+```bash
+./run.sh --test-mode --limit 5 --download-content
 ```
 
-## Basic Usage
+## Docker
 
-The pipeline can be run in different configurations using the run.sh script.
-
-### Simple Embedding Without PDFs
-To only create embeddings without downloading or including PDF content:
+Build and run the pipeline in a container:
 ```bash
-./run.sh
+# Build
+docker build -t lhcb-embedder .
+
+# Run
+docker run -v $(pwd)/chroma_db:/app/chroma_db lhcb-embedder
 ```
+*Note: We mount the `chroma_db` directory to persist the vector database outside the container.*
 
-### Including PDFs
-To download and include PDF content in embeddings:
-```bash
-./run.sh --include-pdf --download-pdfs
-```
+## Output
 
-### Time-Based Filtering
-Process papers from a specific year onwards:
-```bash
-./run.sh --start-year 2020
-```
-
-## Content Chunking Options
-
-For more precise searching, you can enable content chunking which creates separate embeddings for sections of papers.
-
-### Basic Chunking
-Enable chunking with default settings (500 words per chunk, 100 words overlap):
-```bash
-./run.sh --include-pdf --download-pdfs --chunk-mode
-```
-
-### Custom Chunk Size
-Control chunk size and overlap for fine-tuning:
-```bash
-./run.sh --include-pdf --download-pdfs --chunk-mode --chunk-size 300 --chunk-overlap 50
-```
-
-## Test Mode
-
-You can run in test mode with a limited number of papers to verify your setup quickly:
-```bash
-# Test with 10 papers (default)
-./run.sh --test-mode
-
-# Test with custom paper count
-./run.sh --test-mode --limit 20 --include-pdf --download-pdfs
-```
-
-## Force Flags
-
-The pipeline includes three force flags that can be used independently or together:
-
-### Force arXiv Download
-Forces a fresh download of the arXiv metadata:
-```bash
-./run.sh --force-arxiv-download
-```
-
-### Force Embeddings
-Reprocesses all papers, even those that already have embeddings:
-```bash
-./run.sh --force-embeddings
-```
-
-### Force PDF Downloads
-Re-downloads PDFs even if they exist locally:
-```bash
-./run.sh --force-pdf-download
-```
-
-### Combining Force Flags
-You can combine any of the force flags:
-```bash
-# Force everything
-./run.sh --force-arxiv-download --force-embeddings --force-pdf-download --include-pdf --download-pdfs
-
-# Force embeddings with PDF content from 2020
-./run.sh --force-embeddings --include-pdf --download-pdfs --start-year 2020
-```
-
-
-### Skip Confirmation
-To run without confirmation prompts (useful for automated scripts):
-```bash
-./run.sh --include-pdf --download-pdfs --no-confirmation
-```
-
-## Common Scenarios
-
-### First Time Setup
-For first-time setup, run:
-```bash
-# Make run.sh executable
-chmod +x run.sh
-
-# Run with PDF content
-./run.sh --include-pdf --download-pdfs
-```
-
-### Updating Existing Embeddings
-To process only new papers:
-```bash
-./run.sh --include-pdf --download-pdfs
-```
-
-### Creating Chunked Embeddings
-For more fine-grained search with content chunks:
-```bash
-./run.sh --include-pdf --download-pdfs --chunk-mode --chunk-size 400 --chunk-overlap 80
-```
-
-### Moving to New Pinecone Index
-When switching to a new Pinecone index:
-1. Update PINECONE_INDEX_NAME in .env
-2. Run:
-```bash
-./run.sh --force-embeddings --include-pdf --download-pdfs
-```
-
-### Quick Testing
-For testing your setup without processing the entire dataset:
-```bash
-./run.sh --test-mode --limit 5 --include-pdf --download-pdfs
-```
-
-## Embedding Format and Metadata
-
-### Embedding Content Structure
-The embedding text focuses on the most semantically relevant content:
-- **Title**: The paper title
-- **Year**: Publication year
-- **Abstract**: Paper abstract
-- **Content**: PDF content (when using --include-pdf) or content chunks (when using --chunk-mode)
-
-### Metadata Fields
-Each embedding includes these metadata fields:
-- `id`: The paper ID
-- `title`: Paper title
-- `authors`: Authors list (preserved in metadata)
-- `year`: Publication year
-- `abstract`: Paper abstract
-- `categories`: arXiv categories
-- `is_chunk`: Whether this is a content chunk (when using --chunk-mode)
-- `chunk_id`: The chunk identifier (when applicable)
-- `parent_id`: ID of the parent paper (for chunks)
-
-### Refreshing All Data
-To completely refresh all data:
-```bash
-./run.sh --force-arxiv-download --force-embeddings --force-pdf-download --include-pdf --download-pdfs
-```
-
-
-## Available Options
-
-You can display all available options using the help flag:
-
-```bash
-./run.sh --help
-# or
-./run.sh -h
-```
-
-Complete list of available options:
-
-```bash
---include-pdf             Include PDF content in embeddings
---download-pdfs           Download new PDFs
---pdf-dir DIR             Specify PDF directory (default: lhcb_pdfs)
---force-arxiv-download    Force download of new arXiv metadata
---force-embeddings        Force reprocessing of all papers
---force-pdf-download      Force download of all PDFs
---start-year YEAR         Process papers from this year onwards
---no-confirmation         Skip confirmation prompts
---chunk-mode              Chunk PDF content for more precise search
---chunk-size SIZE         Maximum words per chunk (default: 500)
---chunk-overlap OVERLAP   Words to overlap between chunks (default: 100)
---test-mode               Run in test mode with limited papers (for development purposes)
---limit COUNT             Limit number of papers to process in test mode (default: 10)
---help, -h                Show this help message and exit
-```
-
-## Output Files
-
-- `arxiv-metadata-oai-snapshot.json`: arXiv metadata
-- `lhcb-arxiv-embeddings.json`: Generated embeddings
-- `lhcb_pdfs/`: Directory containing downloaded PDFs
-
-## Production Deployment
-
-### lhcbfinder.net Production Setup
-To generate the complete production-ready version as deployed on lhcbfinder.net, use:
-```bash
-./run.sh --force-arxiv-download --force-embeddings --include-pdf --force-pdf-download --download-pdfs --chunk-mode --chunk-size 500 --chunk-overlap 100 --no-confirmation
-```
-Note: This command assumes a clean slate and will rebuild the entire dataset and embeddings from scratch. It requires significant processing time and disk space.
+- `chroma_db/`: Directory containing the ChromaDB database files.
+- `lhcb_html/`: Cache of downloaded HTML content.
+- `lhcb_pdfs/`: Cache of downloaded PDF files.
+- `arxiv-metadata-oai-snapshot.json`: Metadata source file.

@@ -54,8 +54,8 @@ def check_removed_papers_json(json_file='removed_papers.json'):
     except FileNotFoundError:
         return set()
 
-def download_missing_papers(missing_papers, output_dir='lhcb_pdfs'):
-    """Download missing papers using ArxivDownloader."""
+def download_missing_papers(missing_papers, output_dir='lhcb_pdfs', html_dir='lhcb_html'):
+    """Download missing papers using ArxivDownloader with immediate PDF fallback."""
     # Create paper objects in the format expected by ArxivDownloader
     papers_to_download = [{'id': paper_id} for paper_id in missing_papers]
     
@@ -63,20 +63,23 @@ def download_missing_papers(missing_papers, output_dir='lhcb_pdfs'):
     rate_limiter = AdaptiveRateLimiter(initial_delay=5.0, max_delay=300.0)
     downloader = ArxivDownloader(rate_limiter=rate_limiter)
     
-    # Ensure output directory exists
+    # Ensure output directories exist
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
+    html_dir = Path(html_dir)
+    html_dir.mkdir(exist_ok=True)
     
-    print(f"\nAttempting to download {len(papers_to_download)} missing papers...")
+    print(f"\nAttempting to download {len(papers_to_download)} missing papers (HTML with PDF fallback)...")
     
-    # Process the downloads
-    successful, failed = downloader.process_batch(
+    # Process the downloads with immediate fallback
+    successful_html, successful_pdf, failed = downloader.process_with_fallback(
         papers_to_download,
+        html_dir,
         output_dir,
         batch_size=10
     )
     
-    return successful, failed
+    return successful_html + successful_pdf, failed
 
 def main():
     # Setup logging
