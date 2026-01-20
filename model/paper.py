@@ -754,8 +754,10 @@ class Paper:
         return {
             "title": self.title,
             "authors": self.authors_string,
+            "abstract": self.abstract,
             "date": f"{self.year}-{self.month}",
-            "year": int(self.year),  # Ensure int for filtering? Chroma handles numbers.
+            "year": int(self.year),
+            "month": self.month,
             "has_content": self.has_content,
             "content_source": self._content_source or "none",
         }

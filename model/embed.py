@@ -110,8 +110,29 @@ def create_and_store_embeddings(
     db_path = str(Path(output_dir) / "chroma_db")
     chroma_client = chromadb.PersistentClient(path=db_path)
 
-    abstract_collection = chroma_client.get_or_create_collection(name="lhcb_abstracts")
-    content_collection = chroma_client.get_or_create_collection(name="lhcb_contents")
+    # Optimized HNSW parameters for cosine similarity
+    # M: Number of bi-directional links (16 is good balance of speed/quality)
+    # ef_construction: Size of dynamic candidate list (200 for high quality)
+    # space: cosine for normalized BAAI embeddings
+    hnsw_config = {
+        "hnsw:space": "cosine",
+        "hnsw:construction_ef": 200,  # Higher = better quality, slower build
+        "hnsw:M": 16,  # Links per node (8-64 typical, 16 is balanced)
+    }
+    
+    print(f"{Fore.CYAN} HNSW Configuration:")
+    print(f"  - Distance metric: cosine (optimal for BAAI embeddings)")
+    print(f"  - M (links): {hnsw_config['hnsw:M']}")
+    print(f"  - ef_construction: {hnsw_config['hnsw:construction_ef']}")
+    
+    abstract_collection = chroma_client.get_or_create_collection(
+        name="lhcb_abstracts",
+        metadata=hnsw_config
+    )
+    content_collection = chroma_client.get_or_create_collection(
+        name="lhcb_contents",
+        metadata=hnsw_config
+    )
 
     print(f"{Fore.CYAN} Processing {len(papers)} papers for embeddings...")
 
@@ -158,15 +179,13 @@ def create_and_store_embeddings(
                         )  # Embedding vector will be made from this
                         content_ids.append(f"{paper.id}_chunk_{idx}")
 
-                        # Content metadata includes parent ID to link back
-                        meta = paper.metadata.copy()
-                        meta.update(
-                            {
-                                "chunk_index": idx,
-                                "parent_id": paper.id,
-                                "total_chunks": len(chunks),
-                            }
-                        )
+                        # MINIMAL metadata for chunks - avoid duplication
+                        # Full metadata stored in abstract collection, referenced by parent_id
+                        meta = {
+                            "chunk_index": idx,
+                            "parent_id": paper.id,
+                            "total_chunks": len(chunks),
+                        }
                         content_metadatas.append(meta)
 
                     total_chunks += len(chunks)
@@ -179,31 +198,76 @@ def create_and_store_embeddings(
 
         # A. Abstracts
         if abstract_texts:
-            embeddings = model.encode(abstract_texts, show_progress_bar=False).tolist()
-            abstract_collection.upsert(
-                ids=abstract_ids,
-                embeddings=embeddings,
-                metadatas=abstract_metadatas,
-                documents=abstract_texts,  # Optional: Store text in DB too
-            )
+            # Generate embeddings with normalization (important for cosine similarity)
+            embeddings = model.encode(
+                abstract_texts, 
+                show_progress_bar=False,
+                normalize_embeddings=True  # Explicit normalization for cosine
+            ).tolist()
+            
+            # Validate embeddings (check for NaN, Inf, or zero vectors)
+            valid_indices = []
+            for idx, emb in enumerate(embeddings):
+                if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb):
+                    valid_indices.append(idx)
+                else:
+                    print(f"{Fore.YELLOW}Warning: Invalid embedding for {abstract_ids[idx]}")
+            
+            if valid_indices:
+                abstract_collection.upsert(
+                    ids=[abstract_ids[i] for i in valid_indices],
+                    embeddings=[embeddings[i] for i in valid_indices],
+                    metadatas=[abstract_metadatas[i] for i in valid_indices],
+                    documents=[abstract_texts[i] for i in valid_indices],
+                )
+                print(f"{Fore.GREEN}  ✓ Stored {len(valid_indices)}/{len(abstract_texts)} abstract embeddings")
 
         # B. Content Chunks
         if content_texts:
             content_embeddings = model.encode(
-                content_texts, show_progress_bar=False
+                content_texts, 
+                show_progress_bar=False,
+                normalize_embeddings=True
             ).tolist()
-            content_collection.upsert(
-                ids=content_ids,
-                embeddings=content_embeddings,
-                metadatas=content_metadatas,
-                documents=content_texts,
-            )
+            
+            # Validate content embeddings
+            valid_content_indices = []
+            for idx, emb in enumerate(content_embeddings):
+                if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb):
+                    valid_content_indices.append(idx)
+                else:
+                    print(f"{Fore.YELLOW}Warning: Invalid content embedding for {content_ids[idx]}")
+            
+            if valid_content_indices:
+                content_collection.upsert(
+                    ids=[content_ids[i] for i in valid_content_indices],
+                    embeddings=[content_embeddings[i] for i in valid_content_indices],
+                    metadatas=[content_metadatas[i] for i in valid_content_indices],
+                    documents=[content_texts[i] for i in valid_content_indices],
+                )
+                print(f"{Fore.GREEN}  ✓ Stored {len(valid_content_indices)}/{len(content_texts)} content chunk embeddings")
 
-    print(f"\n{Fore.GREEN} Embdedding complete!")
-    print(f"Abstracts stored: {len(papers)}")
-    print(f"Content chunks stored: {total_chunks}")
-    if errors:
-        print(f"Errors: {errors}")
+    # Final summary with detailed statistics
+    elapsed = time.time() - start_time
+    print(f"\n{Fore.GREEN}{'='*60}")
+    print(f"{Fore.GREEN}Embedding Complete!")
+    print(f"{Fore.GREEN}{'='*60}")
+    print(f"{Fore.CYAN}Statistics:")
+    print(f"  - Total papers processed: {len(papers)}")
+    print(f"  - Total content chunks: {total_chunks}")
+    print(f"  - Errors encountered: {errors}")
+    print(f"  - Time elapsed: {elapsed/60:.1f} minutes")
+    print(f"  - Papers per minute: {len(papers)/(elapsed/60):.1f}")
+    
+    # Get final collection counts
+    abs_count = abstract_collection.count()
+    content_count = content_collection.count()
+    print(f"\n{Fore.CYAN}Final Collection Sizes:")
+    print(f"  - Abstracts: {abs_count:,} documents")
+    print(f"  - Contents: {content_count:,} chunks")
+    if abs_count > 0:
+        print(f"  - Average chunks per paper: {content_count/abs_count:.1f}")
+    print(f"{Fore.GREEN}{'='*60}\n")
 
 
 def main():
