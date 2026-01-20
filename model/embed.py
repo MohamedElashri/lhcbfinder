@@ -24,7 +24,7 @@ init(autoreset=True)
 
 
 def download_new_content(
-    papers, html_dir, pdf_dir, output_dir=None, force_content: bool = False
+    papers, html_dir, pdf_dir, output_dir=None, redownload_content: bool = False
 ):
     print(f"Entering unified download_new_content function")
     rate_limiter = AdaptiveRateLimiter(initial_delay=5, max_delay=300)
@@ -36,8 +36,8 @@ def download_new_content(
 
     # Filter papers that need downloading if not forcing
     papers_to_download = []
-    if force_content:
-        print(f"Force content flag is set. Will download all content with immediate PDF fallback.")
+    if redownload_content:
+        print(f"Redownload content flag is set. Will download all content with immediate PDF fallback.")
         papers_to_download = [{"id": paper.id} for paper in papers]
     else:
         existing_html = {f.stem for f in Path(html_dir).glob("*.html")}
@@ -302,9 +302,9 @@ def main():
     print(f"\n{Fore.CYAN} Parsing command line arguments...")
     parser = argparse.ArgumentParser(description="Create embeddings for LHCb papers")
     parser.add_argument(
-        "--download-content",
+        "--with-content",
         action="store_true",
-        help="Download content (HTML with PDF fallback)",
+        help="Include paper content in embeddings (loads from existing HTML/PDF files)",
     )
     parser.add_argument(
         "--html-dir",
@@ -325,19 +325,19 @@ def main():
         help="Base directory for all output (HTML, PDFs, DB, logs)",
     )
     parser.add_argument(
-        "--force-metadata",
+        "--redownload-metadata",
         action="store_true",
-        help="Force download of new arXiv metadata",
+        help="Force re-downloading arXiv metadata from source",
     )
     parser.add_argument(
-        "--force-content",
+        "--redownload-content",
         action="store_true",
-        help="Force download of content (HTML/PDF)",
+        help="Force re-downloading content (HTML/PDF) from arXiv",
     )
     parser.add_argument(
-        "--force-embeddings",
+        "--rebuild-embeddings",
         action="store_true",
-        help="Force reprocessing of all papers",
+        help="Force recreating all embeddings (ignores existing)",
     )
     parser.add_argument("--start-year", type=int, help="Start year for papers")
     parser.add_argument(
@@ -373,12 +373,12 @@ def main():
     print(f"\n{Fore.CYAN} Command Line Arguments:")
     # Common arguments
     print(f"{Fore.WHITE} Output Directory: {Fore.YELLOW}{output_dir}")
-    print(f"{Fore.WHITE} Download Content: {Fore.YELLOW}{args.download_content}")
+    print(f"{Fore.WHITE} Include Content: {Fore.YELLOW}{args.with_content}")
     print(f"{Fore.WHITE} HTML directory: {Fore.YELLOW}{html_dir}")
     print(f"{Fore.WHITE} PDF directory: {Fore.YELLOW}{pdf_dir}")
-    print(f"{Fore.WHITE} Force content: {Fore.YELLOW}{args.force_content}")
-    print(f"{Fore.WHITE} Force metadata: {Fore.YELLOW}{args.force_metadata}")
-    print(f"{Fore.WHITE} Force embeddings: {Fore.YELLOW}{args.force_embeddings}")
+    print(f"{Fore.WHITE} Redownload content: {Fore.YELLOW}{args.redownload_content}")
+    print(f"{Fore.WHITE} Redownload metadata: {Fore.YELLOW}{args.redownload_metadata}")
+    print(f"{Fore.WHITE} Rebuild embeddings: {Fore.YELLOW}{args.rebuild_embeddings}")
 
     # Chunking options
     print(f"{Fore.WHITE} Chunk size: {Fore.YELLOW}{args.chunk_size} words")
@@ -406,14 +406,14 @@ def main():
         f"{Fore.YELLOW} Checking if ArXiv dataset exists at: {Fore.WHITE}{JSON_FILE_PATH}"
     )
 
-    # If force_metadata is set, we need to ensure dataset checks happen
-    if args.force_metadata:
+    # If redownload_metadata is set, we need to ensure dataset checks happen
+    if args.redownload_metadata:
         # logic handled in check_arxiv_dataset or before call
         pass
-    if not os.path.exists(JSON_FILE_PATH) or args.force_metadata:
-        if args.force_metadata:
+    if not os.path.exists(JSON_FILE_PATH) or args.redownload_metadata:
+        if args.redownload_metadata:
             print(
-                f"{Fore.YELLOW} Force download flag set, downloading fresh ArXiv dataset"
+                f"{Fore.YELLOW} Redownload flag set, downloading fresh ArXiv dataset"
             )
         else:
             print(f"{Fore.YELLOW} Dataset not found, downloading ArXiv data")
@@ -452,7 +452,7 @@ def main():
     # Set up directories
     # Set up directories if downloading content
     # Set up directories if downloading content
-    if args.download_content:
+    if args.with_content:
         print(f"{Fore.YELLOW} Setting up directories in {output_dir}...")
         html_dir.mkdir(parents=True, exist_ok=True)
         pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -461,7 +461,7 @@ def main():
     load_start_time = time.time()
 
     # Note for include_pdf
-    if args.download_content:
+    if args.with_content:
         print(f"{Fore.YELLOW} Including content in embeddings")
 
     # Create a spinner or progress indicator for paper loading
@@ -472,11 +472,11 @@ def main():
 
     # Pass both dirs if they exist/are requested
     # Variables html_dir and pdf_dir are already resolved Paths above
-    pass_pdf_dir = str(pdf_dir) if args.download_content else None
-    pass_html_dir = str(html_dir) if args.download_content else None
+    pass_pdf_dir = str(pdf_dir) if args.with_content else None
+    pass_html_dir = str(html_dir) if args.with_content else None
 
     # Determine if we should include content in embeddings
-    include_content = args.download_content
+    include_content = args.with_content
 
     paper_generator = load_data(
         JSON_FILE_PATH,
@@ -539,7 +539,7 @@ def main():
         )
 
     # Download content if requested
-    if args.download_content:
+    if args.with_content:
         print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
         print(f"{Fore.CYAN}║     STAGE 3: CONTENT DOWNLOAD         ║")
         print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
@@ -550,7 +550,7 @@ def main():
             str(html_dir),
             str(pdf_dir),
             output_dir=str(output_dir),
-            force_content=args.force_content,
+            redownload_content=args.redownload_content,
         )
 
         download_time = time.time() - download_start
@@ -623,10 +623,10 @@ def main():
     )
     print(f"{Fore.WHITE} Using ChromaDB (local persistent storage): {Fore.YELLOW}{is_new_index}")
 
-    if not papers_to_process and not args.force_embeddings and not is_new_index:
+    if not papers_to_process and not args.rebuild_embeddings and not is_new_index:
         print(f"\n{Fore.GREEN} No new papers to process.")
         print(
-            f"{Fore.WHITE} Hint: Use --force-embeddings to override and process all papers again."
+            f"{Fore.WHITE} Hint: Use --rebuild-embeddings to override and process all papers again."
         )
 
         # Show completion time before exiting
@@ -645,7 +645,7 @@ def main():
             f"\n{Fore.YELLOW}❗ Ready to process {Fore.WHITE}{len(papers_to_process)}{Fore.YELLOW} papers"
         )
         include_status = (
-            Fore.GREEN + "will" if args.download_content else Fore.RED + "will not"
+            Fore.GREEN + "will" if args.with_content else Fore.RED + "will not"
         )
         print(
             f"{Fore.WHITE} Content (HTML/PDF) {include_status} be included in embeddings."

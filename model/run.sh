@@ -9,10 +9,10 @@ show_help() {
     echo "LHCbFinder Embedding Pipeline"
     echo "Available options:"
     echo "  -h, --help                 Show this help message"
-    echo "  --download-content         Download content (HTML w/ PDF fallback)"
-    echo "  --force-metadata           Force download of new arXiv metadata"
-    echo "  --force-embeddings         Force reprocessing of all papers"
-    echo "  --force-content            Force download of content (HTML/PDF)"
+    echo "  --with-content             Include paper content in embeddings (loads from existing HTML/PDF)"
+    echo "  --redownload-metadata      Force re-downloading arXiv metadata from source"
+    echo "  --rebuild-embeddings       Force recreating all embeddings (ignores existing)"
+    echo "  --redownload-content       Force re-downloading content from arXiv (HTML/PDF)"
     echo "  --output-dir DIR           Directory to store all output files (default: output)"
     echo "  --start-year YEAR          Process papers from this year onwards"
     echo "  --html-dir DIR             Specify HTML directory"
@@ -48,10 +48,10 @@ else
 fi
 
 # Parse command line arguments
-DOWNLOAD_CONTENT=false
-FORCE_METADATA=false
-FORCE_EMBEDDINGS=false
-FORCE_CONTENT=false
+WITH_CONTENT=false
+REDOWNLOAD_METADATA=false
+REBUILD_EMBEDDINGS=false
+REDOWNLOAD_CONTENT=false
 OUTPUT_DIR="output"
 START_YEAR=""
 PDF_DIR="lhcb_pdfs"
@@ -70,24 +70,24 @@ while [[ $# -gt 0 ]]; do
             # This is handled earlier, but included here for completeness
             show_help
             ;;
-        --download-content)
-            DOWNLOAD_CONTENT=true
+        --with-content)
+            WITH_CONTENT=true
             shift
             ;;
-        --force-metadata)
-            FORCE_METADATA=true
+        --redownload-metadata)
+            REDOWNLOAD_METADATA=true
             shift
             ;;
-        --force-embeddings)
-            FORCE_EMBEDDINGS=true
+        --rebuild-embeddings)
+            REBUILD_EMBEDDINGS=true
             shift
             ;;
         --output-dir)
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        --force-content)
-            FORCE_CONTENT=true
+        --redownload-content)
+            REDOWNLOAD_CONTENT=true
             shift
             ;;
 
@@ -190,20 +190,20 @@ if [ ! -z "$START_YEAR" ]; then
     CMD="$CMD --start-year $START_YEAR"
 fi
 
-if $DOWNLOAD_CONTENT; then
-    CMD="$CMD --download-content"
+if $WITH_CONTENT; then
+    CMD="$CMD --with-content"
 fi
 
-if $FORCE_METADATA; then
-    CMD="$CMD --force-metadata"
+if $REDOWNLOAD_METADATA; then
+    CMD="$CMD --redownload-metadata"
 fi
 
-if $FORCE_EMBEDDINGS; then
-    CMD="$CMD --force-embeddings"
+if $REBUILD_EMBEDDINGS; then
+    CMD="$CMD --rebuild-embeddings"
 fi
 
-if $FORCE_CONTENT; then
-    CMD="$CMD --force-content"
+if $REDOWNLOAD_CONTENT; then
+    CMD="$CMD --redownload-content"
 fi
 
 
