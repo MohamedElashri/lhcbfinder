@@ -12,6 +12,7 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 import gc
+import torch
 
 # Disable ChromaDB telemetry to prevent connection hangs
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
@@ -22,6 +23,17 @@ from helpers import load_data
 
 # Initialize colorama
 init(autoreset=True)
+
+
+def get_device():
+    """Detect and return the best available device (GPU/CPU)"""
+    if torch.cuda.is_available():
+        device = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_count = torch.cuda.device_count()
+        return device, gpu_name, gpu_count
+    else:
+        return "cpu", None, 0
 
 
 def download_new_content(
@@ -148,7 +160,8 @@ def stream_and_embed_papers(
             embeddings = model.encode(
                 abstract_batch_texts,
                 show_progress_bar=False,
-                normalize_embeddings=True
+                normalize_embeddings=True,
+                batch_size=32  # Explicit batch size for GPU
             ).tolist()
             
             valid_indices = [
@@ -169,23 +182,35 @@ def stream_and_embed_papers(
             abstract_batch_metadatas = []
             abstract_batch_documents = []
         
-        # Flush content
+        # Flush content - process in smaller sub-batches to avoid GPU memory issues
         if content_batch_texts:
-            content_embeddings = model.encode(
-                content_batch_texts,
-                show_progress_bar=False,
-                normalize_embeddings=True
-            ).tolist()
+            # Process content in sub-batches of 64 to prevent GPU OOM
+            sub_batch_size = 64
+            all_embeddings = []
+            
+            for i in range(0, len(content_batch_texts), sub_batch_size):
+                sub_batch = content_batch_texts[i:i+sub_batch_size]
+                sub_embeddings = model.encode(
+                    sub_batch,
+                    show_progress_bar=False,
+                    normalize_embeddings=True,
+                    batch_size=32
+                )
+                all_embeddings.extend(sub_embeddings.tolist())
+                
+                # Clear GPU cache periodically
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             
             valid_content_indices = [
-                idx for idx, emb in enumerate(content_embeddings)
+                idx for idx, emb in enumerate(all_embeddings)
                 if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb)
             ]
             
             if valid_content_indices:
                 content_collection.upsert(
                     ids=[content_batch_ids[i] for i in valid_content_indices],
-                    embeddings=[content_embeddings[i] for i in valid_content_indices],
+                    embeddings=[all_embeddings[i] for i in valid_content_indices],
                     metadatas=[content_batch_metadatas[i] for i in valid_content_indices],
                     documents=[content_batch_documents[i] for i in valid_content_indices],
                 )
@@ -259,8 +284,9 @@ def stream_and_embed_papers(
                 
                 total_chunks += len(chunks)
             
-            # Flush batches when they reach batch_size
-            if len(abstract_batch_texts) >= batch_size:
+            # Flush batches when they reach batch_size or content exceeds threshold
+            # Keep content batches smaller to avoid GPU memory issues
+            if len(abstract_batch_texts) >= batch_size or len(content_batch_texts) >= 200:
                 flush_batches()
                 # Update progress bar with statistics
                 elapsed = time.time() - start_time
@@ -326,7 +352,15 @@ def create_and_store_embeddings(
 
     model_name = "BAAI/bge-large-en-v1.5"
     print(f"{Fore.YELLOW} Loading model: {Fore.WHITE}{model_name}")
-    model = SentenceTransformer(model_name)
+    
+    # Detect device
+    device, gpu_name, gpu_count = get_device()
+    if device == "cuda":
+        print(f"{Fore.GREEN} GPU detected: {Fore.YELLOW}{gpu_name} {Fore.WHITE}(Count: {gpu_count})")
+    else:
+        print(f"{Fore.YELLOW} No GPU detected, using CPU")
+    
+    model = SentenceTransformer(model_name, device=device)
 
     # Initialize ChromaDB Collections and client
     print(f"{Fore.CYAN} Initializing ChromaDB client...")
@@ -425,7 +459,8 @@ def create_and_store_embeddings(
             embeddings = model.encode(
                 abstract_texts, 
                 show_progress_bar=False,
-                normalize_embeddings=True  # Explicit normalization for cosine
+                normalize_embeddings=True,  # Explicit normalization for cosine
+                batch_size=32  # Explicit batch size for GPU
             ).tolist()
             
             # Validate embeddings (check for NaN, Inf, or zero vectors)
@@ -445,17 +480,29 @@ def create_and_store_embeddings(
                 )
                 print(f"{Fore.GREEN}  ✓ Stored {len(valid_indices)}/{len(abstract_texts)} abstract embeddings")
 
-        # B. Content Chunks
+        # B. Content Chunks - process in sub-batches for GPU memory management
         if content_texts:
-            content_embeddings = model.encode(
-                content_texts, 
-                show_progress_bar=False,
-                normalize_embeddings=True
-            ).tolist()
+            # Process in smaller sub-batches to avoid GPU OOM
+            sub_batch_size = 64
+            all_embeddings = []
+            
+            for i in range(0, len(content_texts), sub_batch_size):
+                sub_batch = content_texts[i:i+sub_batch_size]
+                sub_embeddings = model.encode(
+                    sub_batch, 
+                    show_progress_bar=False,
+                    normalize_embeddings=True,
+                    batch_size=32
+                )
+                all_embeddings.extend(sub_embeddings.tolist())
+                
+                # Clear GPU cache periodically
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             
             # Validate content embeddings
             valid_content_indices = []
-            for idx, emb in enumerate(content_embeddings):
+            for idx, emb in enumerate(all_embeddings):
                 if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb):
                     valid_content_indices.append(idx)
                 else:
@@ -464,7 +511,7 @@ def create_and_store_embeddings(
             if valid_content_indices:
                 content_collection.upsert(
                     ids=[content_ids[i] for i in valid_content_indices],
-                    embeddings=[content_embeddings[i] for i in valid_content_indices],
+                    embeddings=[all_embeddings[i] for i in valid_content_indices],
                     metadatas=[content_metadatas[i] for i in valid_content_indices],
                     documents=[content_texts[i] for i in valid_content_indices],
                 )
@@ -685,7 +732,21 @@ def main():
     
     model_name = "BAAI/bge-large-en-v1.5"
     print(f"{Fore.YELLOW} Loading embedding model: {Fore.WHITE}{model_name}")
-    model = SentenceTransformer(model_name)
+    
+    # Detect device
+    device, gpu_name, gpu_count = get_device()
+    if device == "cuda":
+        print(f"{Fore.GREEN} ✓ GPU detected: {Fore.YELLOW}{gpu_name}")
+        if gpu_count > 1:
+            print(f"{Fore.CYAN}   Available GPUs: {Fore.YELLOW}{gpu_count}")
+        # Show GPU memory info
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        print(f"{Fore.CYAN}   GPU Memory: {Fore.YELLOW}{gpu_memory:.1f} GB")
+    else:
+        print(f"{Fore.YELLOW} ⚠ No GPU detected, using CPU (this will be slower)")
+    
+    model = SentenceTransformer(model_name, device=device)
+    print(f"{Fore.GREEN} ✓ Model loaded on {Fore.YELLOW}{device.upper()}")
     
     print(f"{Fore.CYAN} Initializing ChromaDB client...")
     db_path = str(output_dir / "chroma_db")
