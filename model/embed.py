@@ -17,7 +17,7 @@ os.environ["ANONYMIZED_TELEMETRY"] = "False"
 
 from paper import Paper
 from dataset import ArxivDownloader, AdaptiveRateLimiter, download_arxiv_metadata
-from helpers import load_data, filter_lhcb_papers
+from helpers import load_data
 
 # Initialize colorama
 init(autoreset=True)
@@ -494,16 +494,18 @@ def main():
             f"{Fore.GREEN} Content download completed in {Fore.YELLOW}{download_time:.1f}s"
         )
 
+    # Note: `load_data()` already performs a first-pass filter for LHCb papers
+    # (to avoid loading the whole arXiv dataset into memory). Therefore the
+    # list `all_papers` already contains only the LHCb-related papers. We
+    # skip a redundant second filtering step here.
     print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 4: LHCb FILTERING           ║")
+    print(f"{Fore.CYAN}║     STAGE 4: LHCb (already filtered)  ║")
     print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
 
-    print(f"{Fore.YELLOW} Filtering for LHCb papers...")
-    filtering_start = time.time()
-    lhcb_papers = list(filter_lhcb_papers(all_papers))
-    filtering_time = time.time() - filtering_start
+    lhcb_papers = all_papers
 
     # Stats for LHCb papers
+    filtering_time = 0.0
     lhcb_ratio = len(lhcb_papers) / len(all_papers) * 100 if all_papers else 0
     papers_color = (
         Fore.GREEN
@@ -512,13 +514,11 @@ def main():
     )
 
     print(
-        f"{Fore.GREEN} Found {papers_color}{len(lhcb_papers)}{Fore.GREEN} LHCb papers in {Fore.YELLOW}{filtering_time:.2f}s {Fore.WHITE}({Fore.YELLOW}{lhcb_ratio:.2f}%{Fore.WHITE} of total papers)"
+        f"{Fore.GREEN} Found {papers_color}{len(lhcb_papers)}{Fore.GREEN} LHCb papers ({Fore.YELLOW}{lhcb_ratio:.2f}%{Fore.WHITE} of loaded papers)"
     )
 
     if len(lhcb_papers) == 0:
-        print(f"{Fore.RED} Error: No LHCb papers found in the dataset")
-
-        # Show completion time before exiting
+        print(f"{Fore.RED} Error: No LHCb papers found in the dataset (after metadata filtering)")
         total_time = time.time() - main_start_time
         print(f"\n{Fore.RED} Pipeline terminated due to no LHCb papers found")
         print(
@@ -557,7 +557,7 @@ def main():
     print(
         f"{Fore.WHITE} Papers needing embeddings: {need_embeddings_color}{len(papers_to_process)} {Fore.WHITE}({need_embeddings_color}{papers_to_process_ratio:.1f}%{Fore.WHITE})"
     )
-    print(f"{Fore.WHITE} Using new/empty Pinecone index: {Fore.YELLOW}{is_new_index}")
+    print(f"{Fore.WHITE} Using ChromaDB (local persistent storage): {Fore.YELLOW}{is_new_index}")
 
     if not papers_to_process and not args.force_embeddings and not is_new_index:
         print(f"\n{Fore.GREEN} No new papers to process.")

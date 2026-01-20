@@ -12,6 +12,7 @@ from collections import deque
 import math
 import gzip
 import re
+from filters import filter_lhcb_papers_from_file as filter_lhcb_papers
 
 
 class AdaptiveRateLimiter:
@@ -425,56 +426,8 @@ def download_arxiv_metadata():
         raise FileNotFoundError(error_msg)
 
 
-def filter_lhcb_papers(metadata_file):
-    """Filter papers containing 'lhcb' in title or abstract."""
-    lhcb_papers = []
-    total_papers = 0
-    matched_papers = 0
-    file_reader = None
-
-    logging.info(f"Reading metadata file: {metadata_file}")
-
-    try:
-        # Handle both gzipped and regular files
-        if metadata_file.endswith(".gz"):
-            file_reader = gzip.open(metadata_file, "rt")
-        else:
-            file_reader = open(metadata_file, "r")
-
-        with file_reader as f:
-            for line in tqdm(f, desc="Filtering LHCb papers"):
-                total_papers += 1
-                try:
-                    paper = json.loads(line)
-                    title = paper.get("title", "").lower()
-                    abstract = paper.get("abstract", "").lower()
-
-                    if "lhcb" in title or "lhcb" in abstract:
-                        lhcb_papers.append(paper)
-                        matched_papers += 1
-
-                        if matched_papers % 100 == 0:
-                            logging.info(
-                                f"Found {matched_papers} LHCb papers so far..."
-                            )
-
-                except json.JSONDecodeError as e:
-                    logging.error(f"Error parsing JSON line: {str(e)}")
-                    continue
-
-        logging.info(f"Processed {total_papers} papers total")
-        logging.info(f"Found {matched_papers} papers containing 'lhcb'")
-
-        if len(lhcb_papers) == 0:
-            logging.warning(
-                "No LHCb papers found! This might indicate an issue with the metadata file."
-            )
-
-    except Exception as e:
-        logging.error(f"Error reading metadata file: {str(e)}")
-        raise
-
-    return lhcb_papers
+# Import canonical filter function from filters module
+from filters import filter_lhcb_papers_from_file as filter_lhcb_papers
 
 
 def load_paper_lists():

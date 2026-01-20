@@ -9,6 +9,18 @@ This pipeline ingests LHCb papers from arXiv, processes them (prioritizing HTML 
   - **Content Chunks**: For precise detail matching (40% weight).
 - **Vector Database**: Uses **ChromaDB** (local persistence) for storing and querying embeddings.
 
+## Pipeline Order
+
+The pipeline runs these logical steps (in order):
+
+1. Download arXiv metadata (from Kaggle) if not present or when `--force-metadata` is used.
+2. Filter the metadata for LHCb-related papers (quick first-pass scan to avoid loading the full dataset).
+3. Download content for the filtered LHCb papers (HTML preferred, PDF fallback) when `--download-content` is used.
+4. Parse content / extract text and chunk as configured.
+5. Create embeddings and store them in the local ChromaDB instance.
+
+This ordering keeps the expensive content download and parsing steps limited to the filtered LHCb subset.
+
 ## Command Line Flags
 The `embed.py` script and `run.sh` wrapper support the following flags:
 - **--download-content**: Download content (HTML with PDF fallback) for filtered papers (Recommended).

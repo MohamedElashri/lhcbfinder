@@ -4,6 +4,7 @@ from tqdm import tqdm
 from paper import Paper
 from pathlib import Path
 import gzip
+from filters import filter_lhcb_papers_from_objects as filter_lhcb_papers
 
 
 def count_lines(file_path):
@@ -109,17 +110,5 @@ def load_data(
                 continue
 
 
-def filter_lhcb_papers(papers):
-    """
-    Filter papers containing 'lhcb' in title or abstract.
-    Now with progress bar.
-    """
-    print("\nFiltering LHCb papers...")
-    lhcb_papers = []
-
-    for paper in tqdm(papers, desc="Filtering papers"):
-        if paper.is_lhcb_related():
-            lhcb_papers.append(paper)
-
-    print(f"Found {len(lhcb_papers)} LHCb papers out of {len(papers)} total papers")
-    return lhcb_papers
+# Import canonical filter function from filters module
+from filters import filter_lhcb_papers_from_objects as filter_lhcb_papers
