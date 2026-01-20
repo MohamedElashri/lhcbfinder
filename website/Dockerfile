@@ -27,10 +27,16 @@ COPY requirements.txt .
 # Create logs directory
 RUN mkdir -p logs
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn redis
+# Install uv for faster package installation
+RUN pip install --no-cache-dir uv
+
+# Install Python dependencies using uv
+RUN uv pip install --system --no-cache -r requirements.txt \
+    && uv pip install --system --no-cache gunicorn redis
+
+# Create ChromaDB mount point directory
+# Volume will be mounted at /app/chroma_db (see docker-compose.yml)
+RUN mkdir -p /app/chroma_db
 
 # Create and switch to non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app

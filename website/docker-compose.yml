@@ -7,16 +7,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - PINECONE_API_KEY=${PINECONE_API_KEY}
-      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME}
-      - FLASK_ENV=${FLASK_ENV}
-      - FLASK_APP=${FLASK_APP}
+      - CHROMA_DB_PATH=/app/chroma_db
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_APP=${FLASK_APP:-app.py}
       - WORKERS=2
       - THREADS=4
       - TIMEOUT=60
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./logs:/app/logs
+      - ../model/output/chroma_db:/app/chroma_db:ro
     depends_on:
       - redis
     healthcheck:

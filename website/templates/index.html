@@ -132,6 +132,13 @@
             <form id="search_form" onsubmit="performSearch(); return false;">
                 <textarea id="query_field" class="placeholder_hidden" name="query" autocapitalize="off" 
                     placeholder='Try "CP violation", "https://arxiv.org/abs/2511.02619v1", or "2511.02619v1"'></textarea>
+                <div id="search_options">
+                    <label class="search-option-label">
+                        <input type="checkbox" id="include_content" name="include_content" value="1">
+                        <span class="checkbox-text">Include full-text search</span>
+                        <span class="option-hint">(slower, more comprehensive)</span>
+                    </label>
+                </div>
                 <button id="search_button" type="submit">Search</button>
             </form>
     

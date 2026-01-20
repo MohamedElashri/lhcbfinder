@@ -223,9 +223,11 @@ function performSearch() {
     $("#results").hide();
 
     let queryVal = $('textarea[name="query"]').val();
+    let includeContent = $('#include_content').is(':checked') ? '1' : '0';
 
     $.getJSON("/search", {
-        query: queryVal
+        query: queryVal,
+        include_content: includeContent
     }, function(data) {
         field.style.animationName = "";
         field.readOnly = false;
