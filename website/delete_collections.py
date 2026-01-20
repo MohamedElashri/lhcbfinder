@@ -36,7 +36,7 @@ try:
     print("=" * 60)
     print("\nNext steps:")
     print("1. cd /data/home/melashri/LLM/lhcbfinder/model")
-    print("2. ./run.sh --output-dir output --force-embeddings")
+    print("2. ./run.sh --output-dir output --with-content --rebuild-embeddings")
     print("\nBoth collections will be created with cosine similarity.")
     
 except Exception as e:

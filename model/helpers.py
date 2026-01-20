@@ -72,16 +72,16 @@ def load_data(
                 print(f"Error processing line {i}: {str(e)}")
                 continue
 
-    print(f"Found {len(lhcb_ids)} LHCb-related papers")
+    print(f"\nFound {len(lhcb_ids)} LHCb-related papers")
+    print(f"Preparing to stream papers for embedding...\n")
 
-    # Second pass: load only the filtered LHCb papers
-    print("Second pass: loading the filtered LHCb papers...")
+    # Second pass: stream the filtered LHCb papers (yields one-by-one, no bulk loading)
     with (
         gzip.open(json_file_path, "rt", encoding="utf-8")
         if json_file_path.endswith(".gz")
         else open(json_file_path, "r", encoding="utf-8") as f
     ):
-        for i, line in enumerate(tqdm(f, desc="Loading papers", unit=" papers")):
+        for i, line in enumerate(f):
             try:
                 data_dict = json.loads(line)
                 paper_id = data_dict.get("id", "")

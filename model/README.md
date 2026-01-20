@@ -4,6 +4,7 @@ This pipeline ingests LHCb papers from arXiv, processes them (prioritizing HTML 
 
 ## Features
 - **Dual Content Source**: Attempts to download high-quality HTML from arXiv. If unavailable (e.g., 404), falls back to PDF processing.
+- **Streaming Processing**: Processes papers incrementally (stream → filter → download → embed) for minimal memory usage
 - **Weighted Embeddings**: Generates separate embeddings for:
   - **Abstracts**: For broad semantic matching (60% weight).
   - **Content Chunks**: For precise detail matching (40% weight).
@@ -23,14 +24,16 @@ This ordering keeps the expensive content download and parsing steps limited to 
 
 ## Command Line Flags
 The `embed.py` script and `run.sh` wrapper support the following flags:
-- **--download-content**: Download content (HTML with PDF fallback) for filtered papers (Recommended).
-- **--force-metadata**: Force re-download of the arXiv metadata file from Kaggle.
-- **--force-content**: Force re-download of content (HTML/PDF) even if files exist.
-- **--force-embeddings**: Force regeneration of embeddings even if they exist.
-- **--start-year YYYY**: Process papers published from the specified year onwards.
-- **--test-mode**: Enable test mode, processing a small, fixed number of papers.
-- **--limit N**: Limit the number of papers processed (useful with `--test-mode`).
-- **--output-dir**: Base directory for all output (HTML, PDFs, DB, logs).
+- **--with-content**: Include paper content in embeddings (loads from existing HTML/PDF files)
+- **--redownload-metadata**: Force re-downloading arXiv metadata from source
+- **--redownload-content**: Force re-downloading content (HTML/PDF) from arXiv
+- **--rebuild-embeddings**: Force recreating all embeddings (ignores existing)
+- **--start-year YYYY**: Process papers published from the specified year onwards
+- **--test-mode**: Enable test mode, processing a small, fixed number of papers
+- **--limit N**: Limit the number of papers processed (useful with `--test-mode`)
+- **--output-dir**: Base directory for all output (HTML, PDFs, DB, logs)
+- **--chunk-size**: Maximum words per chunk (default: 500)
+- **--chunk-overlap**: Words to overlap between chunks (default: 100)
 
 ## Prerequisites
 
@@ -59,16 +62,16 @@ The `embed.py` script and `run.sh` wrapper support the following flags:
 The pipeline is controlled via `run.sh` or directly via `python embed.py`.
 
 ### 1. Standard Ingestion (Recommended)
-Downloads HTML/PDFs and creates embeddings:
+Load existing HTML/PDFs and create embeddings:
 ```bash
-./run.sh --download-content
+./run.sh --with-content
 ```
-*Note: `--download-content` attempts to download HTML first, then falls back to PDF if HTML is unavailable.*
+*Note: `--with-content` loads existing files. Use `--redownload-content` to force fresh downloads.*
 
 ### 2. Time-Based Filtering
-Process only recent papers (e.g., fro 2025 onwards):
+Process only recent papers (e.g., from 2025 onwards):
 ```bash
-./run.sh --start-year 2025 --download-content
+./run.sh --start-year 2025 --with-content
 ```
 
 These papers from 2025 onwards will probably have HTML versions available for all of them. Older papers may still require PDF fallback.
@@ -76,14 +79,14 @@ These papers from 2025 onwards will probably have HTML versions available for al
 ### 3. Force Refresh
 To re-download and re-embed everything:
 ```bash
-./run.sh --force-embeddings --force-content --download-content
+./run.sh --rebuild-embeddings --redownload-content --with-content
 ```
-*(`--force-content` re-fetches content for all papers).*
+*(`--redownload-content` re-fetches content for all papers).*
 
 ### 4. Test Mode (Development)
 Process a small subset (e.g., 5 papers) to verify setup:
 ```bash
-./run.sh --test-mode --limit 5 --download-content
+./run.sh --test-mode --limit 5 --with-content
 ```
 
 ## Docker

@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import List
+from itertools import islice
 
 from colorama import Fore, init, Style
 from tqdm import tqdm
@@ -85,6 +86,226 @@ def download_new_content(
 # Can implement verify_html_downloads later if needed.
 
 
+def stream_and_embed_papers(
+    paper_generator,
+    model,
+    abstract_collection,
+    content_collection,
+    html_dir: str,
+    pdf_dir: str,
+    output_dir: str,
+    chunk_size: int = 500,
+    chunk_overlap: int = 100,
+    batch_size: int = 32,
+    redownload_content: bool = False,
+    with_content: bool = False,
+):
+    """
+    Stream papers from generator and embed them incrementally.
+    Model and collections are pre-initialized and passed in.
+    """
+    from html_parser import ArxivHTMLParser
+    
+    # Initialize downloader if content is requested
+    downloader = None
+    if with_content:
+        rate_limiter = AdaptiveRateLimiter(initial_delay=5, max_delay=300)
+        downloader = ArxivDownloader(
+            rate_limiter=rate_limiter, 
+            data_dir=output_dir
+        )
+    
+    # Start timing for embedding work only
+    start_time = time.time()
+    
+    # Statistics
+    total_papers_seen = 0
+    lhcb_papers_found = 0
+    total_chunks = 0
+    errors = 0
+    
+    # Progress bar (will be created after first paper arrives)
+    pbar = None
+    
+    # Batch accumulation for efficient embedding
+    abstract_batch_texts = []
+    abstract_batch_ids = []
+    abstract_batch_metadatas = []
+    abstract_batch_documents = []
+    
+    content_batch_texts = []
+    content_batch_ids = []
+    content_batch_metadatas = []
+    content_batch_documents = []
+    
+    def flush_batches():
+        """Helper to flush accumulated batches to ChromaDB"""
+        nonlocal abstract_batch_texts, abstract_batch_ids, abstract_batch_metadatas, abstract_batch_documents
+        nonlocal content_batch_texts, content_batch_ids, content_batch_metadatas, content_batch_documents
+        
+        # Flush abstracts
+        if abstract_batch_texts:
+            embeddings = model.encode(
+                abstract_batch_texts,
+                show_progress_bar=False,
+                normalize_embeddings=True
+            ).tolist()
+            
+            valid_indices = [
+                idx for idx, emb in enumerate(embeddings)
+                if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb)
+            ]
+            
+            if valid_indices:
+                abstract_collection.upsert(
+                    ids=[abstract_batch_ids[i] for i in valid_indices],
+                    embeddings=[embeddings[i] for i in valid_indices],
+                    metadatas=[abstract_batch_metadatas[i] for i in valid_indices],
+                    documents=[abstract_batch_documents[i] for i in valid_indices],
+                )
+            
+            abstract_batch_texts = []
+            abstract_batch_ids = []
+            abstract_batch_metadatas = []
+            abstract_batch_documents = []
+        
+        # Flush content
+        if content_batch_texts:
+            content_embeddings = model.encode(
+                content_batch_texts,
+                show_progress_bar=False,
+                normalize_embeddings=True
+            ).tolist()
+            
+            valid_content_indices = [
+                idx for idx, emb in enumerate(content_embeddings)
+                if all(abs(x) < 1e10 for x in emb) and any(abs(x) > 1e-10 for x in emb)
+            ]
+            
+            if valid_content_indices:
+                content_collection.upsert(
+                    ids=[content_batch_ids[i] for i in valid_content_indices],
+                    embeddings=[content_embeddings[i] for i in valid_content_indices],
+                    metadatas=[content_batch_metadatas[i] for i in valid_content_indices],
+                    documents=[content_batch_documents[i] for i in valid_content_indices],
+                )
+            
+            content_batch_texts = []
+            content_batch_ids = []
+            content_batch_metadatas = []
+            content_batch_documents = []
+    
+    # Process papers (load_data already filtered them)
+    for paper in paper_generator:
+        # Create progress bar after filtering completes (first paper arrives)
+        if pbar is None:
+            pbar = tqdm(desc="Embedding papers", unit=" papers", colour="green")
+        
+        total_papers_seen += 1
+        lhcb_papers_found += 1  # All papers from generator are LHCb papers
+        pbar.update(1)
+        
+        try:
+            # Download content if requested
+            if with_content and downloader:
+                safe_paper_id = paper.id.replace("/", "_")
+                html_path = Path(html_dir) / f"{safe_paper_id}.html"
+                pdf_path = Path(pdf_dir) / f"{safe_paper_id}.pdf"
+                
+                # Check if we need to download
+                if redownload_content or (not html_path.exists() and not pdf_path.exists()):
+                    # Download with immediate fallback
+                    html_ids, pdf_ids, failed = downloader.process_with_fallback(
+                        [{"id": paper.id}],
+                        html_dir,
+                        pdf_dir,
+                        batch_size=1
+                    )
+                    
+                    # Reload content after download
+                    if paper.id in html_ids:
+                        paper.reload_content(html_dir=html_dir)
+                    elif paper.id in pdf_ids:
+                        paper.reload_content(pdf_dir=pdf_dir)
+                else:
+                    # Load existing content
+                    if html_path.exists():
+                        paper.reload_content(html_dir=html_dir)
+                    elif pdf_path.exists():
+                        paper.reload_content(pdf_dir=pdf_dir)
+            
+            # Prepare abstract embedding
+            abs_text = paper.embedding_text_abstract
+            abstract_batch_texts.append(abs_text)
+            abstract_batch_ids.append(paper.id)
+            abstract_batch_metadatas.append(paper.metadata)
+            abstract_batch_documents.append(abs_text)
+            
+            # Prepare content embeddings if available
+            if paper.has_content:
+                chunks = ArxivHTMLParser.chunk_content(
+                    paper._content, chunk_size, chunk_overlap
+                )
+                
+                for idx, chunk in enumerate(chunks):
+                    content_batch_texts.append(chunk)
+                    content_batch_ids.append(f"{paper.id}_chunk_{idx}")
+                    content_batch_metadatas.append({
+                        "chunk_index": idx,
+                        "parent_id": paper.id,
+                        "total_chunks": len(chunks),
+                    })
+                    content_batch_documents.append(chunk)
+                
+                total_chunks += len(chunks)
+            
+            # Flush batches when they reach batch_size
+            if len(abstract_batch_texts) >= batch_size:
+                flush_batches()
+                # Update progress bar with statistics
+                elapsed = time.time() - start_time
+                rate = lhcb_papers_found / elapsed if elapsed > 0 else 0
+                pbar.set_postfix({
+                    'chunks': f"{total_chunks:,}",
+                    'rate': f"{rate:.1f}/s",
+                    'errors': errors
+                })
+        
+        except Exception as e:
+            errors += 1
+            pbar.write(f"{Fore.RED}Error processing paper {paper.id}: {e}")
+    
+    # Flush remaining batches
+    flush_batches()
+    
+    # Close progress bar (if it was created)
+    if pbar is not None:
+        pbar.close()
+    
+    elapsed = time.time() - start_time
+    print(f"\n{Fore.GREEN}{'='*60}")
+    print(f"{Fore.GREEN}Streaming Processing Complete!")
+    print(f"{Fore.GREEN}{'='*60}")
+    print(f"{Fore.CYAN}Statistics:")
+    print(f"  - LHCb papers processed: {lhcb_papers_found:,}")
+    print(f"  - Total content chunks: {total_chunks:,}")
+    print(f"  - Errors encountered: {errors}")
+    print(f"  - Time elapsed: {elapsed/60:.1f} minutes")
+    print(f"  - Papers per minute: {lhcb_papers_found/(elapsed/60):.1f}")
+    
+    # Get final collection counts
+    abs_count = abstract_collection.count()
+    content_count = content_collection.count()
+    print(f"\n{Fore.CYAN}Final Collection Sizes:")
+    print(f"  - Abstracts: {abs_count:,} documents")
+    print(f"  - Contents: {content_count:,} chunks")
+    if abs_count > 0:
+        print(f"  - Average chunks per paper: {content_count/abs_count:.1f}")
+    print(f"{Fore.GREEN}{'='*60}\n")
+    
+    return lhcb_papers_found, total_chunks, errors
+
+
 def create_and_store_embeddings(
     papers: List,
     chroma_client=None,
@@ -94,6 +315,8 @@ def create_and_store_embeddings(
     output_dir: str = ".",
 ):
     """
+    DEPRECATED: Use stream_and_embed_papers for better memory efficiency.
+    
     Create embeddings and store them in ChromaDB.
     Maintains two collections:
     1. 'lhcb_abstracts': One embedding per paper (Title + Abstract)
@@ -449,33 +672,51 @@ def main():
             f"{Fore.GREEN} ArXiv dataset found! {Fore.WHITE}({Fore.YELLOW}{file_size_gb:.2f} GB{Fore.WHITE})"
         )
 
-    # Set up directories
-    # Set up directories if downloading content
     # Set up directories if downloading content
     if args.with_content:
         print(f"{Fore.YELLOW} Setting up directories in {output_dir}...")
         html_dir.mkdir(parents=True, exist_ok=True)
         pdf_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{Fore.CYAN} Loading and filtering papers...")
-    load_start_time = time.time()
-
-    # Note for include_pdf
-    if args.with_content:
-        print(f"{Fore.YELLOW} Including content in embeddings")
-
-    # Create a spinner or progress indicator for paper loading
-    print(f"{Fore.YELLOW} Loading papers from ArXiv dataset...")
-
-    # Load and filter papers with timing
-    loading_start = time.time()
-
-    # Pass both dirs if they exist/are requested
-    # Variables html_dir and pdf_dir are already resolved Paths above
+    # STAGE 2: Initialize model and ChromaDB
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 2: INITIALIZATION & FILTERING           ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════════╝")
+    
+    model_name = "BAAI/bge-large-en-v1.5"
+    print(f"{Fore.YELLOW} Loading embedding model: {Fore.WHITE}{model_name}")
+    model = SentenceTransformer(model_name)
+    
+    print(f"{Fore.CYAN} Initializing ChromaDB client...")
+    db_path = str(output_dir / "chroma_db")
+    chroma_client = chromadb.PersistentClient(path=db_path)
+    
+    hnsw_config = {
+        "hnsw:space": "cosine",
+        "hnsw:construction_ef": 200,
+        "hnsw:M": 16,
+    }
+    
+    print(f"{Fore.CYAN} HNSW Configuration:")
+    print(f"  - Distance metric: cosine (optimal for BAAI embeddings)")
+    print(f"  - M (links): {hnsw_config['hnsw:M']}")
+    print(f"  - ef_construction: {hnsw_config['hnsw:construction_ef']}")
+    
+    abstract_collection = chroma_client.get_or_create_collection(
+        name="lhcb_abstracts",
+        metadata=hnsw_config
+    )
+    content_collection = chroma_client.get_or_create_collection(
+        name="lhcb_contents",
+        metadata=hnsw_config
+    )
+    
+    print(f"{Fore.GREEN} Initialization complete!\n")
+    
+    # Create paper generator (load_data will filter and show progress bars)
+    print(f"{Fore.CYAN} Filtering arXiv dataset for LHCb papers...")
     pass_pdf_dir = str(pdf_dir) if args.with_content else None
     pass_html_dir = str(html_dir) if args.with_content else None
-
-    # Determine if we should include content in embeddings
     include_content = args.with_content
 
     paper_generator = load_data(
@@ -485,195 +726,38 @@ def main():
         include_content=include_content,
         start_year=args.start_year,
     )
-
-    # If in test mode, limit the number of papers with progress indicator
+    
+    # Limit generator if in test mode
     if args.test_mode:
-        print(f"{Fore.MAGENTA} TEST MODE: Limiting to {args.limit} papers")
-        all_papers = []
-        with tqdm(
-            total=args.limit, desc=f"{Fore.GREEN}Loading papers", unit="paper"
-        ) as pbar:
-            for i, paper in enumerate(paper_generator):
-                all_papers.append(paper)
-                pbar.update(1)
-                if i >= args.limit - 1:  # -1 because i starts at 0
-                    break
-    else:
-        # For full mode, we can't know the total count in advance, use simple progress indicator
-        print(
-            f"{Fore.YELLOW} Loading all papers from dataset (this may take a while)..."
-        )
-        all_papers = []
-        for i, paper in enumerate(paper_generator):
-            all_papers.append(paper)
-            # Print progress every 50,000 papers
-            if (i + 1) % 50000 == 0:
-                print(f"{Fore.GREEN} Loaded {i + 1} papers so far...")
+        print(f"{Fore.MAGENTA} TEST MODE: Will process only first {args.limit} papers\n")
+        paper_generator = islice(paper_generator, args.limit)
 
-    # Calculate loading time and speed
-    loading_time = time.time() - loading_start
-    papers_per_second = len(all_papers) / loading_time if loading_time > 0 else 0
 
-    print(
-        f"{Fore.GREEN} Loaded {Fore.YELLOW}{len(all_papers):,}{Fore.GREEN} total papers in {Fore.YELLOW}{loading_time:.1f}s {Fore.GREEN}({Fore.YELLOW}{papers_per_second:.1f}{Fore.GREEN} papers/sec)"
-    )
-
-    # Print some information about the dataset
-    years = {}
-    categories = {}
-    for paper in all_papers[:1000]:  # Sample first 1000 papers for quick stats
-        year = getattr(paper, "year", 0)
-        years[year] = years.get(year, 0) + 1
-
-        for category in getattr(paper, "categories", []):
-            categories[category] = categories.get(category, 0) + 1
-
-    if years:
-        print(f"{Fore.CYAN} Sample Data Statistics (first 1000 papers):")
-        print(f"{Fore.WHITE} Years: {Fore.YELLOW}{sorted(years.keys())[:5]}...")
-        top_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[
-            :5
-        ]
-        print(
-            f"{Fore.WHITE} Top categories: {', '.join([f'{cat} ({count})' for cat, count in top_categories])}"
-        )
-
-    # Download content if requested
-    if args.with_content:
-        print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-        print(f"{Fore.CYAN}║     STAGE 3: CONTENT DOWNLOAD         ║")
-        print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
-        download_start = time.time()
-
-        download_new_content(
-            all_papers,
-            str(html_dir),
-            str(pdf_dir),
-            output_dir=str(output_dir),
-            redownload_content=args.redownload_content,
-        )
-
-        download_time = time.time() - download_start
-        print(
-            f"{Fore.GREEN} Content download completed in {Fore.YELLOW}{download_time:.1f}s"
-        )
-
-    # Note: `load_data()` already performs a first-pass filter for LHCb papers
-    # (to avoid loading the whole arXiv dataset into memory). Therefore the
-    # list `all_papers` already contains only the LHCb-related papers. We
-    # skip a redundant second filtering step here.
-    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 4: LHCb (already filtered)  ║")
-    print(f"{Fore.CYAN}╚═══════════════════════════════════════╝")
-
-    lhcb_papers = all_papers
-
-    # Stats for LHCb papers
-    filtering_time = 0.0
-    lhcb_ratio = len(lhcb_papers) / len(all_papers) * 100 if all_papers else 0
-    papers_color = (
-        Fore.GREEN
-        if len(lhcb_papers) > 50
-        else (Fore.YELLOW if len(lhcb_papers) > 10 else Fore.RED)
-    )
-
-    print(
-        f"{Fore.GREEN} Found {papers_color}{len(lhcb_papers)}{Fore.GREEN} LHCb papers ({Fore.YELLOW}{lhcb_ratio:.2f}%{Fore.WHITE} of loaded papers)"
-    )
-
-    if len(lhcb_papers) == 0:
-        print(f"{Fore.RED} Error: No LHCb papers found in the dataset (after metadata filtering)")
-        total_time = time.time() - main_start_time
-        print(f"\n{Fore.RED} Pipeline terminated due to no LHCb papers found")
-        print(
-            f"{Fore.WHITE}⏱ Total execution time: {Fore.YELLOW}{total_time:.1f}s {Fore.WHITE}({Fore.YELLOW}{total_time / 60:.1f} minutes)"
-        )
-        return
-
-    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 5: EMBEDDING PREPARATION            ║")
-    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
-
-    print(f"{Fore.YELLOW} Checking for existing embeddings...")
-    # NOTE: Chroma DB handles duplicates if IDs match, but we can verify counts.
-    # We can skip complex checking for now and let Chroma upsert handle updates.
-    # TODO: implement a simple check function later.
-    papers_to_process = lhcb_papers
-    is_new_index = (
-        True  # Assume we want to process everything or rely on Chroma's upsert
-    )
-
-    # Optional: logic to skip if already in DB (not implemented for Chroma yet in this script,
-    # relying on upsert efficiency or user using --force-embeddings)
-    # TODO: Implement check_existing_embeddings function later.
-
-    papers_to_process_ratio = (
-        len(papers_to_process) / len(lhcb_papers) * 100 if lhcb_papers else 0
-    )
-    need_embeddings_color = (
-        Fore.GREEN
-        if papers_to_process_ratio < 30
-        else (Fore.YELLOW if papers_to_process_ratio < 70 else Fore.RED)
-    )
-
-    print(f"\n{Fore.CYAN} Current Status:")
-    print(f"{Fore.WHITE} Total LHCb papers found: {papers_color}{len(lhcb_papers)}")
-    print(
-        f"{Fore.WHITE} Papers needing embeddings: {need_embeddings_color}{len(papers_to_process)} {Fore.WHITE}({need_embeddings_color}{papers_to_process_ratio:.1f}%{Fore.WHITE})"
-    )
-    print(f"{Fore.WHITE} Using ChromaDB (local persistent storage): {Fore.YELLOW}{is_new_index}")
-
-    if not papers_to_process and not args.rebuild_embeddings and not is_new_index:
-        print(f"\n{Fore.GREEN} No new papers to process.")
-        print(
-            f"{Fore.WHITE} Hint: Use --rebuild-embeddings to override and process all papers again."
-        )
-
-        # Show completion time before exiting
-        total_time = time.time() - main_start_time
-        print(
-            f"\n{Fore.GREEN} Pipeline completed successfully (no new papers to process)"
-        )
-        print(
-            f"{Fore.WHITE} Total execution time: {Fore.YELLOW}{total_time:.1f}s {Fore.WHITE}({Fore.YELLOW}{total_time / 60:.1f} minutes)"
-        )
-        return
-    else:
-        print(f"\n{Fore.GREEN} Found {len(papers_to_process)} papers to process")
-
-        print(
-            f"\n{Fore.YELLOW}❗ Ready to process {Fore.WHITE}{len(papers_to_process)}{Fore.YELLOW} papers"
-        )
-        include_status = (
-            Fore.GREEN + "will" if args.with_content else Fore.RED + "will not"
-        )
-        print(
-            f"{Fore.WHITE} Content (HTML/PDF) {include_status} be included in embeddings."
-        )
-
-        # User requested no interaction, so we skip confirmation
-        print(f"{Fore.GREEN} Proceeding automatically...")
-
-    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════╗")
-    print(f"{Fore.CYAN}║     STAGE 6: EMBEDDING CREATION               ║")
-    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════╝")
-
-    # Create embeddings for the papers
-    embedding_start = time.time()
-
+    # STAGE 3: Embedding (will start after generator completes filtering)
+    print(f"\n{Fore.CYAN}╔═══════════════════════════════════════════════════╗")
+    print(f"{Fore.CYAN}║     STAGE 3: EMBEDDING PIPELINE                   ║")
+    print(f"{Fore.CYAN}╚═══════════════════════════════════════════════════╝")
+    print(f"{Fore.GREEN} Starting embedding process...\n")
+    
     try:
-        # Call the create_and_store_embeddings function
-        create_and_store_embeddings(
-            papers_to_process,
+        lhcb_count, chunk_count, error_count = stream_and_embed_papers(
+            paper_generator=paper_generator,
+            model=model,
+            abstract_collection=abstract_collection,
+            content_collection=content_collection,
+            html_dir=str(html_dir),
+            pdf_dir=str(pdf_dir),
+            output_dir=str(output_dir),
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
-            output_dir=str(output_dir),
+            batch_size=32,
+            redownload_content=args.redownload_content,
+            with_content=args.with_content,
         )
 
     except Exception as e:
-        print(f"{Fore.RED} Error during embedding creation/storage: {str(e)}")
+        print(f"{Fore.RED} Error during streaming pipeline: {str(e)}")
         import traceback
-
         print(f"{Fore.RED}{traceback.format_exc()}")
         raise
 
@@ -708,30 +792,9 @@ def main():
 
     # Final statistics summary
     print(f"\n{Fore.CYAN} Final Statistics:")
-    print(f"{Fore.WHITE} Total papers processed: {Fore.YELLOW}{len(all_papers):,}")
-    print(
-        f"{Fore.WHITE} LHCb papers found: {papers_color}{len(lhcb_papers)} {Fore.WHITE}({papers_color}{lhcb_ratio:.2f}%{Fore.WHITE})"
-    )
-    # Calculate content source statistics
-    html_count = sum(
-        1 for p in lhcb_papers if getattr(p, "_content_source", None) == "html"
-    )
-    pdf_count = sum(
-        1 for p in lhcb_papers if getattr(p, "_content_source", None) == "pdf"
-    )
-    no_content_count = len(lhcb_papers) - html_count - pdf_count
-
-    print(f"{Fore.WHITE} Content Distribution:")
-    print(
-        f"  • {Fore.GREEN}HTML: {html_count} papers ({html_count / len(lhcb_papers) * 100:.1f}%)"
-    )
-    print(
-        f"  • {Fore.YELLOW}PDF (Fallback): {pdf_count} papers ({pdf_count / len(lhcb_papers) * 100:.1f}%)"
-    )
-    if no_content_count > 0:
-        print(
-            f"  • {Fore.RED}No Content: {no_content_count} papers ({no_content_count / len(lhcb_papers) * 100:.1f}%)"
-        )
+    print(f"{Fore.WHITE} LHCb papers found & embedded: {Fore.YELLOW}{lhcb_count:,}")
+    print(f"{Fore.WHITE} Content chunks created: {Fore.YELLOW}{chunk_count:,}")
+    print(f"{Fore.WHITE} Errors encountered: {Fore.YELLOW}{error_count}")
     print(f"{Fore.WHITE} Embeddings creation process finished.")
 
     try:
